@@ -4,6 +4,6 @@ import enum
 class NodeStatus(enum.StrEnum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
-    SUCCESS = "SUCCESS"
+    COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     SKIPPED = "SKIPPED"

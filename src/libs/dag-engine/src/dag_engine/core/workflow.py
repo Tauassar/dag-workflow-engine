@@ -99,7 +99,7 @@ class WorkflowDAG:
         return self._handlers_by_type[node.type]
 
     def _all_deps_ok(self, node: DagNode) -> bool:
-        return all(self._nodes[d].status == NodeStatus.SUCCESS for d in node.depends_on)
+        return all(self._nodes[d].status == NodeStatus.COMPLETED for d in node.depends_on)
 
     async def execute(self, initial_payload=None) -> dict[t.Any, dict[str, t.Any] | t.Any]:
         # seed
@@ -129,7 +129,7 @@ class WorkflowDAG:
                 if not tt.done():
                     tt.cancel()
 
-        return {nid: (node.result if node.status == NodeStatus.SUCCESS else {"status": node.status.value}) for nid, node in self._nodes.items()}
+        return {nid: (node.result if node.status == NodeStatus.COMPLETED else {"status": node.status.value}) for nid, node in self._nodes.items()}
 
     async def _emit(self, event: WorkflowEvent) -> None:
         await self.event_store.append(event)
@@ -198,7 +198,7 @@ class WorkflowDAG:
 
     async def _mark_success(self, node: DagNode, result: t.Any):
         async with self._lock:
-            node.status = NodeStatus.SUCCESS
+            node.status = NodeStatus.COMPLETED
             node.result = result
             node.finished_at = time.time()
             self._inflight.discard(node.id)
@@ -207,7 +207,7 @@ class WorkflowDAG:
             workflow_id=self.workflow_id,
             workflow_name=self.workflow_name,
             node_id=node.id,
-            event_type=WorkflowEventType.NODE_SUCCEEDED,
+            event_type=WorkflowEventType.NODE_COMPLETED,
             attempt=node.attempt,
             payload={"result": result},
         ))
