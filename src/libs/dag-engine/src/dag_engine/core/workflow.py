@@ -17,6 +17,7 @@ from dag_engine.event_sourcing.schemas import WorkflowEvent
 
 class NodeCtx(t.TypedDict, total=False):
     workflow_name: str
+    workflow_id: str
     node_id: str
     node_def: t.Any
     dag_ref: WorkflowDAG
@@ -32,18 +33,19 @@ class WorkflowValidatorDAG:
         self.dag = dag
 
     def validate(self):
+        dag = self.dag
         # check cycles (Kahn)
-        indeg = {nid: len(n.depends_on) for nid, n in self.dag._nodes.items()}
+        indeg = {nid: len(n.depends_on) for nid, n in dag._nodes.items()}
         q = [nid for nid, d in indeg.items() if d == 0]
         seen = 0
         while q:
             x = q.pop()
             seen += 1
-            for c in self.dag._nodes[x].dependents:
+            for c in dag._nodes[x].dependents:
                 indeg[c] -= 1
                 if indeg[c] == 0:
                     q.append(c)
-        if seen != len(self.dag._nodes):
+        if seen != len(dag._nodes):
             raise DagValidationError("cycle detected")
 
 
@@ -242,6 +244,7 @@ class WorkflowDAG:
         handler = self.get_handler_for_node(node)
         ctx = NodeCtx(
             workflow_name=self.workflow_name,
+            workflow_id=self.workflow_id,
             node_id=nid,
             node_def=node,
             dag_ref=self,
