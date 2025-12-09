@@ -5,9 +5,12 @@ import asyncio, time
 import logging
 
 from dag_engine.core import DagService,  WorkflowWorker
-from dag_engine.store import InMemoryEventStore
-from dag_engine.transport import TaskMessage, InMemoryTransport
+from dag_engine.store import InMemoryEventStore, RedisEventStore
+from dag_engine.transport import TaskMessage, InMemoryTransport, RedisTransport
 from .core.workflow import WorkflowDAG
+from redis.asyncio import Redis
+
+redis = Redis(host="localhost", port=6379, decode_responses=True)
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -83,16 +86,42 @@ async def output_handler(task: TaskMessage):
 
 # --- Run the workflow ---
 async def main():
-    transport = InMemoryTransport()
-    store = InMemoryEventStore()
+    transport = RedisTransport(
+        redis=redis,
+        tasks_stream="engine:tasks",
+        results_stream="engine:results",
+        task_group="engine-task-group",
+        result_group="engine-result-group",
+        consumer_name="controller",   # for DagService
+    )
+    worker_transport = RedisTransport(
+        redis=redis,
+        tasks_stream="engine:tasks",
+        results_stream="engine:results",
+        task_group="engine-task-group",
+        result_group="engine-result-group",
+        consumer_name="worker-1",
+    )
+    worker2_transport = RedisTransport(
+        redis=redis,
+        tasks_stream="engine:tasks",
+        results_stream="engine:results",
+        task_group="engine-task-group",
+        result_group="engine-result-group",
+        consumer_name="worker-2",
+    )
+    await transport.init()
+    await worker_transport.init()
+    await worker2_transport.init()
+    store = RedisEventStore(redis)
     dag_service = DagService(dag, transport, event_store=store)
 
     # start DagService (seed roots and start result subscription)
     await dag_service.start()
 
     # start external workers (they read tasks via transport)
-    worker1 = WorkflowWorker(transport, dag.handlers, worker_id="w1")
-    worker2 = WorkflowWorker(transport, dag.handlers, worker_id="w2")
+    worker1 = WorkflowWorker(worker_transport, dag.handlers, worker_id="w1")
+    worker2 = WorkflowWorker(worker2_transport, dag.handlers, worker_id="w2")
 
     # run workers in background
     wtask1 = asyncio.create_task(worker1.run())

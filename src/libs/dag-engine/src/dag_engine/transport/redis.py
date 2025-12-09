@@ -8,22 +8,25 @@ from .protocols import Transport
 
 class RedisTransport(Transport):
     """
-    Redis Streams based transport.
-    Streams:
-        tasks_stream:  stream for task messages
-        results_stream: stream for result messages
+    Redis Streams transport.
 
-    Uses consumer groups to allow multiple workers to share the load.
+    All routing is done by DagService + Worker.
+
+    Streams are generic:
+        - tasks_stream
+        - results_stream
+
+    Multiple workflows can share these streams safely.
     """
 
     def __init__(
         self,
         redis: Redis,
-        tasks_stream: str = "wf:tasks",
-        results_stream: str = "wf:results",
+        tasks_stream: str = "tasks",
+        results_stream: str = "results",
         task_group: str = "task_group",
         result_group: str = "result_group",
-        consumer_name: str = "consumer-1",
+        consumer_name: str = "consumer",
         block_ms: int = 5000,
     ):
         self.redis = redis
@@ -35,73 +38,52 @@ class RedisTransport(Transport):
         self.block_ms = block_ms
 
     # -------------------------------------------------------
-    # Consumer group initialization
+    # Initialization (idempotent)
     # -------------------------------------------------------
     async def init(self):
-        """
-        Create consumer groups if they do not exist.
-        Redis streams must exist before XGROUP CREATE, so we XADD a dummy entry.
-        """
-        # Create stream implicitly if empty
+        await self._ensure_stream_exists(self.tasks_stream)
+        await self._ensure_stream_exists(self.results_stream)
+        await self._ensure_consumer_group(self.tasks_stream, self.task_group)
+        await self._ensure_consumer_group(self.results_stream, self.result_group)
+
+    async def _ensure_stream_exists(self, stream: str):
+        """Ensure Redis stream exists by adding a dummy entry."""
         try:
-            await self.redis.xadd(self.tasks_stream, {"_": "init"}, id="*")
-        except Exception:
-            pass
-        try:
-            await self.redis.xadd(self.results_stream, {"_": "init"}, id="*")
+            await self.redis.xadd(stream, {"_": "init"}, id="*")
         except Exception:
             pass
 
-        # Create task consumer group
+    async def _ensure_consumer_group(self, stream: str, group: str):
         try:
             await self.redis.xgroup_create(
-                name=self.tasks_stream,
-                groupname=self.task_group,
-                id="0",
-                mkstream=True,
+                name=stream, groupname=group, id="0", mkstream=True
             )
         except Exception:
-            # already exists
-            pass
-
-        # Create result consumer group
-        try:
-            await self.redis.xgroup_create(
-                name=self.results_stream,
-                groupname=self.result_group,
-                id="0",
-                mkstream=True,
-            )
-        except Exception:
+            # group already exists
             pass
 
     # -------------------------------------------------------
-    # Publish messages
+    # Publish
     # -------------------------------------------------------
     async def publish_task(self, task: TaskMessage) -> None:
         await self.redis.xadd(
             self.tasks_stream,
-            {"json": task.model_dump()},
+            {"json": task.json()},
             id="*"
         )
 
     async def publish_result(self, result: ResultMessage) -> None:
         await self.redis.xadd(
             self.results_stream,
-            {"json": result.model_dump()},
+            {"json": result.json()},
             id="*"
         )
 
     # -------------------------------------------------------
-    # Subscribe to tasks
+    # Subscribe to tasks (workers)
     # -------------------------------------------------------
     async def subscribe_tasks(self) -> AsyncIterator[TaskMessage]:
-        """
-        Workers call this: uses XREADGROUP to fetch tasks.
-        Uses consumer group so messages are distributed across workers.
-        """
         while True:
-            # Read messages for this consumer
             resp = await self.redis.xreadgroup(
                 groupname=self.task_group,
                 consumername=self.consumer_name,
@@ -109,36 +91,26 @@ class RedisTransport(Transport):
                 count=1,
                 block=self.block_ms,
             )
-
             if not resp:
-                continue  # timeout, check again
+                continue
 
-            for stream_name, messages in resp:
+            for _, messages in resp:
                 for msg_id, fields in messages:
                     try:
-                        payload = fields.get(b"json") or fields.get("json")
-                        data = json.loads(payload)
+                        raw = fields.get(b"json") or fields.get("json")
+                        data = json.loads(raw)
                         task = TaskMessage.parse_obj(data)
                         yield task
-                    except Exception as exc:
-                        print("Failed to decode task:", exc)
-                        continue
+                    except Exception as e:
+                        print("task decode failure:", e)
                     finally:
-                        # Acknowledge so it's not re-delivered
-                        await self.redis.xack(
-                            self.tasks_stream, self.task_group, msg_id
-                        )
-                        await self.redis.xdel(
-                            self.tasks_stream, msg_id
-                        )
+                        await self.redis.xack(self.tasks_stream, self.task_group, msg_id)
+                        await self.redis.xdel(self.tasks_stream, msg_id)
 
     # -------------------------------------------------------
-    # Subscribe to results
+    # Subscribe to results (DagService)
     # -------------------------------------------------------
     async def subscribe_results(self) -> AsyncIterator[ResultMessage]:
-        """
-        DagService calls this: consumes results from worker.
-        """
         while True:
             resp = await self.redis.xreadgroup(
                 groupname=self.result_group,
@@ -147,24 +119,18 @@ class RedisTransport(Transport):
                 count=1,
                 block=self.block_ms,
             )
-
             if not resp:
                 continue
 
-            for stream_name, messages in resp:
+            for _, messages in resp:
                 for msg_id, fields in messages:
                     try:
-                        payload = fields.get(b"json") or fields.get("json")
-                        data = json.loads(payload)
+                        raw = fields.get(b"json") or fields.get("json")
+                        data = json.loads(raw)
                         result = ResultMessage.parse_obj(data)
                         yield result
-                    except Exception as exc:
-                        print("Failed to decode result:", exc)
-                        continue
+                    except Exception as e:
+                        print("result decode failure:", e)
                     finally:
-                        await self.redis.xack(
-                            self.results_stream, self.result_group, msg_id
-                        )
-                        await self.redis.xdel(
-                            self.results_stream, msg_id
-                        )
+                        await self.redis.xack(self.results_stream, self.result_group, msg_id)
+                        await self.redis.xdel(self.results_stream, msg_id)
