@@ -92,13 +92,8 @@ async def main():
     await dag_service.start()
 
     # start external workers (they read tasks via transport)
-    handler_registry: dict[str, Handler] = {
-        "input": input_handler,
-        "call_external_service": call_external_service,
-        "output": output_handler,
-    }
-    worker1 = WorkflowWorker(transport, handler_registry, worker_id="w1")
-    worker2 = WorkflowWorker(transport, handler_registry, worker_id="w2")
+    worker1 = WorkflowWorker(transport, dag.handlers, worker_id="w1")
+    worker2 = WorkflowWorker(transport, dag.handlers, worker_id="w2")
 
     # run workers in background
     wtask1 = asyncio.create_task(worker1.run())

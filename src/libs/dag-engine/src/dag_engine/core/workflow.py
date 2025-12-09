@@ -56,6 +56,10 @@ class WorkflowDAG:
     def nodes(self):
         return self._nodes
 
+    @property
+    def handlers(self):
+        return self._handlers_by_type
+
     def _validate_acyclic(self):
         indeg = {nid: len(n.depends_on) for nid, n in self._nodes.items()}
         q = [nid for nid, d in indeg.items() if d == 0]
