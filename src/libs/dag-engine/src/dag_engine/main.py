@@ -113,14 +113,14 @@ async def main():
         await transport.close_tasks()
         await transport.close_results()  # close result subscription as well
 
-    await asyncio.gather(wtask1, wtask2, return_exceptions=True)
+    # await asyncio.gather(wtask1, wtask2, return_exceptions=True)
 
     # collect outputs and events
     results = dag_service.collect_results()
     events = await store.list_events(dag.workflow_id)
 
     print("=== RESULTS ===")
-    print(json.dumps(results, indent=2))
+    print(results)
     print("\n=== EVENTS ===")
     for e in events:
         print(e.model_dump())
