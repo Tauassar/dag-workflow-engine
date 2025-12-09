@@ -1,6 +1,6 @@
 from typing import List, Protocol
 
-from dag_engine.event_sourcing.schemas import WorkflowEvent
+from dag_engine.event_sourcing import WorkflowEvent
 
 
 class EventStore(Protocol):

@@ -4,10 +4,9 @@ import typing as t
 
 from .constants import NodeStatus
 from .workflow import WorkflowDAG
-from dag_engine.event_sourcing.schemas import WorkflowEvent
+from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
 from dag_engine.store import EventStore
 from dag_engine.transport import Transport, TaskMessage, ResultMessage, ResultType, InMemoryTransport
-from dag_engine.event_sourcing.constants import WorkflowEventType
 
 
 logger = logging.getLogger(__name__)

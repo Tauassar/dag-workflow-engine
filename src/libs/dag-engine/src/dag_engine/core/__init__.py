@@ -13,11 +13,15 @@ from .workflow import WorkflowDAG
 
 
 __all__ = (
-    'NodeStatus',
+    "NodeStatus",
     "RetryPolicy",
     "NodeDefinition",
     "DAGDefinition",
     "WorkflowDefinition",
     "DagNode",
-    'WorkflowDAG',
+    "DagService",
+    "WorkflowWorker",
+    "DagEngineException",
+    "DagValidationError",
+    "WorkflowDAG",
 )
