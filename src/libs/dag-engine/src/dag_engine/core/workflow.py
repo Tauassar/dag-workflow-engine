@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import typing as t
 import asyncio, time
-import uuid
 
 from .constants import NodeStatus
 from .exceptions import DagValidationError
@@ -17,7 +16,6 @@ from dag_engine.event_sourcing.schemas import WorkflowEvent
 
 class NodeCtx(t.TypedDict, total=False):
     workflow_name: str
-    workflow_id: str
     node_id: str
     node_def: t.Any
     dag_ref: WorkflowDAG
@@ -50,12 +48,17 @@ class WorkflowValidatorDAG:
 
 
 class WorkflowDAG:
-    def __init__(self, definition: WorkflowDefinition, event_store: EventStore | None = None, concurrency: int = 4, validator: type[WorkflowValidatorDAG] = WorkflowValidatorDAG) -> None:
+    def __init__(
+        self,
+        definition: WorkflowDefinition,
+        event_store: EventStore | None = None,
+        concurrency: int = 4,
+        validator: type[WorkflowValidatorDAG] = WorkflowValidatorDAG
+    ) -> None:
         if event_store is None:
             event_store = InMemoryEventStore()
-
-        self.workflow_id = str(uuid.uuid4())
         self.event_store = event_store
+
         self.workflow_name = definition.name
         self._nodes = {}
 
@@ -143,7 +146,6 @@ class WorkflowDAG:
 
             # emit retry
             await self._emit(WorkflowEvent(
-                workflow_id=self.workflow_id,
                 workflow_name=self.workflow_name,
                 node_id=node.id,
                 event_type=WorkflowEventType.NODE_RETRY,
@@ -177,7 +179,6 @@ class WorkflowDAG:
 
         # emit event
         await self._emit(WorkflowEvent(
-            workflow_id=self.workflow_id,
             workflow_name=self.workflow_name,
             node_id=node.id,
             event_type=WorkflowEventType.NODE_FAILED,
@@ -191,7 +192,6 @@ class WorkflowDAG:
             if dep.status == NodeStatus.PENDING:
                 dep.status = NodeStatus.SKIPPED
                 await self._emit(WorkflowEvent(
-                    workflow_id=self.workflow_id,
                     workflow_name=self.workflow_name,
                     node_id=dep.id,
                     event_type=WorkflowEventType.NODE_SKIPPED,
@@ -206,7 +206,6 @@ class WorkflowDAG:
             self._inflight.discard(node.id)
 
         await self._emit(WorkflowEvent(
-            workflow_id=self.workflow_id,
             workflow_name=self.workflow_name,
             node_id=node.id,
             event_type=WorkflowEventType.NODE_COMPLETED,
@@ -232,7 +231,6 @@ class WorkflowDAG:
 
         await self._emit(
             WorkflowEvent(
-                workflow_id=self.workflow_id,
                 workflow_name=self.workflow_name,
                 node_id=node.id,
                 event_type=WorkflowEventType.NODE_STARTED,
@@ -244,7 +242,6 @@ class WorkflowDAG:
         handler = self.get_handler_for_node(node)
         ctx = NodeCtx(
             workflow_name=self.workflow_name,
-            workflow_id=self.workflow_id,
             node_id=nid,
             node_def=node,
             dag_ref=self,

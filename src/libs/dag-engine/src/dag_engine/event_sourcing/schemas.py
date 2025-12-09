@@ -6,7 +6,6 @@ from .constants import WorkflowEventType
 
 
 class WorkflowEvent(BaseModel):
-    workflow_id: str
     workflow_name: str
     node_id: str
     event_type: WorkflowEventType
