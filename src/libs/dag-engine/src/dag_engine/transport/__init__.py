@@ -5,6 +5,7 @@ from .messages import (
     ResultMessage,
 )
 from .local import InMemoryTransport
+from .redis import RedisTransport
 
 
 __all__ = (
@@ -13,4 +14,5 @@ __all__ = (
     'ResultType',
     'ResultMessage',
     'InMemoryTransport',
+    'RedisTransport',
 )

@@ -10,7 +10,8 @@ from .schemas import (
 )
 from .entities import DagNode
 from dag_engine.store import InMemoryEventStore, EventStore
-from ..transport import TaskMessage
+from dag_engine.transport import TaskMessage
+
 
 Handler = t.Callable[[TaskMessage], t.Awaitable[t.Any]]
 

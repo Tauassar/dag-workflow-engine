@@ -1,5 +1,8 @@
-from .context import Handler
-from ..transport import ResultType, ResultMessage, TaskMessage, Transport
+import typing as t
+from dag_engine.transport import ResultType, ResultMessage, Transport, TaskMessage
+
+
+Handler = t.Callable[[TaskMessage], t.Awaitable[t.Any]]
 
 
 class WorkflowWorker:

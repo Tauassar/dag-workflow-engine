@@ -7,7 +7,7 @@ from .workflow import WorkflowDAG
 from dag_engine.event_sourcing.schemas import WorkflowEvent
 from dag_engine.store import EventStore
 from dag_engine.transport import Transport, TaskMessage, ResultMessage, ResultType, InMemoryTransport
-from ..event_sourcing.constants import WorkflowEventType
+from dag_engine.event_sourcing.constants import WorkflowEventType
 
 
 logger = logging.getLogger(__name__)

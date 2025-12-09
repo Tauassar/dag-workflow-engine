@@ -23,13 +23,3 @@ class DagNode:
     result: t.Any = None
     started_at: float | None = None
     finished_at: float | None = None
-
-
-# Snapshot returned to worker so it doesn't touch DAG internals
-@dataclass
-class NodeExecutionSnapshot:
-    id: str
-    type: str
-    config: dict[str, t.Any]
-    attempt: int
-    timeout_seconds: float | None

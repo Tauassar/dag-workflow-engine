@@ -8,7 +8,7 @@ from dag_engine.core.services import DagService
 from dag_engine.core.worker import WorkflowWorker
 from dag_engine.store import InMemoryEventStore
 from dag_engine.transport import TaskMessage, InMemoryTransport
-from .core.workflow import WorkflowDAG, Handler
+from .core.workflow import WorkflowDAG
 
 logging.basicConfig(level=logging.DEBUG)
 
