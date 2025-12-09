@@ -5,7 +5,7 @@ from .schemas import (
     WorkflowDefinition,
 )
 from .entities import DagNode
-from .workflow import WorkflowDAG, NodeCtx, Handler
+from .workflow import WorkflowDAG, Handler
 
 
 __all__ = (
@@ -15,6 +15,5 @@ __all__ = (
     "WorkflowDefinition",
     "DagNode",
     'WorkflowDAG',
-    'NodeCtx',
     'Handler',
 )

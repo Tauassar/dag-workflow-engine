@@ -1,14 +1,15 @@
-from pydantic import BaseModel
-from typing import Any, Dict, Optional
+import pydantic as pd
+import typing as t
 import time
 
 from .constants import WorkflowEventType
 
 
-class WorkflowEvent(BaseModel):
+class WorkflowEvent(pd.BaseModel):
     workflow_name: str
+    workflow_id: str
     node_id: str
     event_type: WorkflowEventType
-    timestamp: float = time.time()
+    timestamp: float = pd.Field(default_factory=lambda: time.time())
     attempt: int
-    payload: Optional[Dict[str, Any]] = None  # node result or error
+    payload: dict[str, t.Any] | None = None  # node result or error

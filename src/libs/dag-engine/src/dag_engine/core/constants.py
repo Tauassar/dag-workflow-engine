@@ -6,4 +6,3 @@ class NodeStatus(enum.StrEnum):
     RUNNING = "RUNNING"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
-    SKIPPED = "SKIPPED"
