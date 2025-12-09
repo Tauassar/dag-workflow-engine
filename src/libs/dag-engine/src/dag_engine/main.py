@@ -3,7 +3,7 @@ import json
 
 import asyncio, time
 
-from .workflow import WorkflowDAG
+from .core.workflow import WorkflowDAG
 
 
 USER_JSON = """{
@@ -96,6 +96,7 @@ async def main():
     results = await dag.execute(initial_payload={"run_meta": "demo_run"})
     print("=== results ===")
     print(json.dumps(results, indent=2))
+    print(json.dumps([i.model_dump() for i in (await dag.event_store.list_events(dag.workflow_id))], indent=2))
 
 if __name__ == "__main__":
     asyncio.run(main())

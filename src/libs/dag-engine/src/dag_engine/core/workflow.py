@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import typing as t
 import asyncio, time
+import uuid
 
 from .constants import NodeStatus
 from .exceptions import DagValidationError
@@ -9,12 +10,16 @@ from .schemas import (
     WorkflowDefinition,
 )
 from .entities import DagNode
+from dag_engine.store import InMemoryEventStore, EventStore
+from dag_engine.event_sourcing.constants import WorkflowEventType
+from dag_engine.event_sourcing.schemas import WorkflowEvent
 
 
 class NodeCtx(t.TypedDict, total=False):
     workflow_name: str
     node_id: str
     node_def: t.Any
+    dag_ref: WorkflowDAG
     attempt: int
     payload: t.Any
 
@@ -43,7 +48,12 @@ class WorkflowValidatorDAG:
 
 
 class WorkflowDAG:
-    def __init__(self, definition: WorkflowDefinition, concurrency: int = 4, validator: type[WorkflowValidatorDAG] = WorkflowValidatorDAG) -> None:
+    def __init__(self, definition: WorkflowDefinition, event_store: EventStore | None = None, concurrency: int = 4, validator: type[WorkflowValidatorDAG] = WorkflowValidatorDAG) -> None:
+        if event_store is None:
+            event_store = InMemoryEventStore()
+
+        self.workflow_id = str(uuid.uuid4())
+        self.event_store = event_store
         self.workflow_name = definition.name
         self._nodes = {}
 
@@ -60,7 +70,6 @@ class WorkflowDAG:
                 raise DagValidationError(f"Undefined node with id '{n.id}'") from exc
 
         self._handlers_by_type = {}
-        self._handlers_by_id = {}
         self.concurrency = concurrency
         self._ready_q = asyncio.Queue()
         self._inflight = set()
@@ -87,13 +96,9 @@ class WorkflowDAG:
         return decorator
 
     def get_handler_for_node(self, node: DagNode) -> Handler:
-        if node.id in self._handlers_by_id:
-            return self._handlers_by_id[node.id]
-        if node.type in self._handlers_by_type:
-            return self._handlers_by_type[node.type]
-        raise KeyError(f"no handler for node {node.id}")
+        return self._handlers_by_type[node.type]
 
-    def _all_deps_succeeded(self, node: DagNode) -> bool:
+    def _all_deps_ok(self, node: DagNode) -> bool:
         return all(self._nodes[d].status == NodeStatus.SUCCESS for d in node.depends_on)
 
     async def execute(self, initial_payload=None) -> dict[t.Any, dict[str, t.Any] | t.Any]:
@@ -120,11 +125,98 @@ class WorkflowDAG:
         try:
             await asyncio.gather(*workers)
         finally:
-            for t in workers:
-                if not t.done():
-                    t.cancel()
-        # results
+            for tt in workers:
+                if not tt.done():
+                    tt.cancel()
+
         return {nid: (node.result if node.status == NodeStatus.SUCCESS else {"status": node.status.value}) for nid, node in self._nodes.items()}
+
+    async def _emit(self, event: WorkflowEvent) -> None:
+        await self.event_store.append(event)
+
+    async def _handle_failure(self, node: DagNode, exc: Exception):
+        retry_policy = node.retry_policy
+        if retry_policy and node.attempt < retry_policy.max_attempts:
+            backoff = retry_policy.backoff_for_attempt(node.attempt)
+
+            # emit retry
+            await self._emit(WorkflowEvent(
+                workflow_id=self.workflow_id,
+                workflow_name=self.workflow_name,
+                node_id=node.id,
+                event_type=WorkflowEventType.NODE_RETRY,
+                attempt=node.attempt,
+                payload={"error": repr(exc)},
+            ))
+
+            async with self._lock:
+                node.status = NodeStatus.PENDING
+                node.last_error = exc
+                self._inflight.discard(node.id)
+
+            # requeue after backoff
+            asyncio.create_task(self._schedule_retry(node.id, backoff))
+        else:
+            await self._mark_failed(node, exc)
+
+    async def _schedule_retry(self, nid: str, delay: float):
+        await asyncio.sleep(delay)
+        async with self._lock:
+            node = self._nodes[nid]
+            if node.status == NodeStatus.PENDING and self._all_deps_ok(node):
+                await self._ready_q.put(nid)
+
+    async def _mark_failed(self, node: DagNode, exc: Exception):
+        async with self._lock:
+            node.status = NodeStatus.FAILED
+            node.last_error = exc
+            node.finished_at = time.time()
+            self._inflight.discard(node.id)
+
+        # emit event
+        await self._emit(WorkflowEvent(
+            workflow_id=self.workflow_id,
+            workflow_name=self.workflow_name,
+            node_id=node.id,
+            event_type=WorkflowEventType.NODE_FAILED,
+            attempt=node.attempt,
+            payload={"error": repr(exc)},
+        ))
+
+        # mark dependents skipped
+        for d in node.dependents:
+            dep = self._nodes[d]
+            if dep.status == NodeStatus.PENDING:
+                dep.status = NodeStatus.SKIPPED
+                await self._emit(WorkflowEvent(
+                    workflow_id=self.workflow_id,
+                    workflow_name=self.workflow_name,
+                    node_id=dep.id,
+                    event_type=WorkflowEventType.NODE_SKIPPED,
+                    attempt=0,
+                ))
+
+    async def _mark_success(self, node: DagNode, result: t.Any):
+        async with self._lock:
+            node.status = NodeStatus.SUCCESS
+            node.result = result
+            node.finished_at = time.time()
+            self._inflight.discard(node.id)
+
+        await self._emit(WorkflowEvent(
+            workflow_id=self.workflow_id,
+            workflow_name=self.workflow_name,
+            node_id=node.id,
+            event_type=WorkflowEventType.NODE_SUCCEEDED,
+            attempt=node.attempt,
+            payload={"result": result},
+        ))
+
+        # schedule dependents
+        for d in node.dependents:
+            dep = self._nodes[d]
+            if dep.status == NodeStatus.PENDING and self._all_deps_ok(dep):
+                await self._ready_q.put(d)
 
     async def _run_node(self, nid: str, payload) -> None:
         node = self._nodes[nid]
@@ -136,50 +228,35 @@ class WorkflowDAG:
             node.started_at = time.time()
             self._inflight.add(nid)
 
+        await self._emit(
+            WorkflowEvent(
+                workflow_id=self.workflow_id,
+                workflow_name=self.workflow_name,
+                node_id=node.id,
+                event_type=WorkflowEventType.NODE_STARTED,
+                attempt=node.attempt,
+                payload=None,
+            )
+        )
+
+        handler = self.get_handler_for_node(node)
+        ctx = NodeCtx(
+            workflow_name=self.workflow_name,
+            node_id=nid,
+            node_def=node,
+            dag_ref=self,
+            attempt=node.attempt,
+            payload=payload,
+        )
         try:
-            handler = self.get_handler_for_node(node)
-        except Exception as e:
-            async with self._lock:
-                node.status = NodeStatus.FAILED
-                node.last_error = e
-                node.finished_at = time.time()
-                self._inflight.discard(nid)
-            # mark dependents skipped
-            for d in node.dependents:
-                dep = self._nodes[d]
-                if dep.status == NodeStatus.PENDING:
-                    dep.status = NodeStatus.SKIPPED
+            if node.timeout_seconds:
+                coro = handler(ctx)
+                result = await asyncio.wait_for(coro, timeout=node.timeout_seconds)
+            else:
+                result = await handler(ctx)
+
+        except Exception as exc:
+            await self._handle_failure(node, exc)
             return
 
-        ctx = {
-            "workflow_name": self.workflow_name,
-            "node_id": nid,
-            "node_def": node,
-            "dag_ref": self,        # NEW — expose DAG state to handlers
-            "attempt": node.attempt,
-            "payload": payload,
-        }
-        try:
-            result = await handler(t.cast(NodeCtx, ctx))
-        except Exception as e:
-            async with self._lock:
-                node.status = NodeStatus.FAILED
-                node.last_error = e
-                node.finished_at = time.time()
-                self._inflight.discard(nid)
-            for d in node.dependents:
-                dep = self._nodes[d]
-                if dep.status == NodeStatus.PENDING:
-                    dep.status = NodeStatus.SKIPPED
-            return
-        else:
-            async with self._lock:
-                node.status = NodeStatus.SUCCESS
-                node.result = result
-                node.finished_at = time.time()
-                self._inflight.discard(nid)
-            # enqueue dependents that are now ready
-            for d in node.dependents:
-                dep = self._nodes[d]
-                if dep.status == NodeStatus.PENDING and self._all_deps_succeeded(dep):
-                    await self._ready_q.put(d)
+        await self._mark_success(node, result)
