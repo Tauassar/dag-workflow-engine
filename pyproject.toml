@@ -1,0 +1,58 @@
+[project]
+name = "dag-workflow-engine"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.12.0b1",
+    "redis>=4.6.0"
+]
+
+[tool.uv]
+prerelease = "allow"
+
+[tool.uv.workspace]
+members = ["src/services/*", "src/libs/*"]
+
+[tool.uv.sources]
+events-kafka = { workspace = true }
+
+[tool.black]
+line-length = 120
+target-version = ["py312", "py313"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+multi_line_output = 3
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "C",   # flake8-comprehensions
+    "B",   # flake8-bugbear
+    "TID", # flake8-tidy-imports
+    "TCH", # flake8-type-checking
+    "T20", # flake8-print
+]
+ignore = [
+    "E501", # line too long, handled by black
+    "B008", # do not perform function calls in argument defaults
+    "C901", # too complex
+    "F405", # django settings
+]
+
+[tool.mypy]
+python_version = "3.13"
+plugins = "pydantic.mypy"
+strict = false
+exclude = ["tests/", "migrations/"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
