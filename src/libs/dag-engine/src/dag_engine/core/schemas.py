@@ -6,7 +6,7 @@ class RetryPolicy(pd.BaseModel):
     max_attempts: int = pd.Field(default=3, ge=1)
     initial_backoff_seconds: float = 1.0
     backoff_multiplier: float = 2.0
-    max_backoff_seconds: float = 3.0
+    max_backoff_seconds: float = 10.0
 
     def backoff_for_attempt(self, attempt: int) -> float:
         backoff = self.initial_backoff_seconds * (self.backoff_multiplier ** (attempt - 1))
