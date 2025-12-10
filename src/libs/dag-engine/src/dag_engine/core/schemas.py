@@ -3,10 +3,10 @@ import pydantic as pd
 
 
 class RetryPolicy(pd.BaseModel):
-    max_attempts: int = pd.Field(3, ge=1)
+    max_attempts: int = pd.Field(default=3, ge=1)
     initial_backoff_seconds: float = 1.0
     backoff_multiplier: float = 2.0
-    max_backoff_seconds: float = 60.0
+    max_backoff_seconds: float = 3.0
 
     def backoff_for_attempt(self, attempt: int) -> float:
         backoff = self.initial_backoff_seconds * (self.backoff_multiplier ** (attempt - 1))
@@ -18,7 +18,7 @@ class NodeDefinition(pd.BaseModel):
     type: str = pd.Field(alias="handler")
     config: dict[str, t.Any] = pd.Field(default_factory=dict)
     depends_on: list[str] = pd.Field(alias="dependencies", default_factory=list)
-    retry_policy: RetryPolicy | None = None
+    retry_policy: RetryPolicy = RetryPolicy()
     timeout_seconds: float | None = None
 
 

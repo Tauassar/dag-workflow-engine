@@ -6,6 +6,7 @@ import logging
 
 from dag_engine.core import DagOrchestrator,  WorkflowWorker
 from dag_engine.event_store import RedisEventStore
+from dag_engine.idempotency_store import RedisIdempotencyStore
 from dag_engine.result_store import RedisResultStore
 from dag_engine.transport import TaskMessage, InMemoryTransport, RedisTransport
 from .core.workflow import WorkflowDAG
@@ -52,8 +53,9 @@ USER_JSON = """{
       },
       {
         "id": "get_comments",
-        "handler": "call_external_service",
+        "handler": "call_external_service1",
         "dependencies": ["input"],
+        "timeout_seconds": 1,
         "config": {
           "url": "http://localhost:8911/document/policy/list"
         }
@@ -82,9 +84,17 @@ async def input_handler(task: TaskMessage):
 
 @dag.handler("call_external_service")
 async def call_external_service(task: TaskMessage):
-    print(f"Received task {task.model_dump()}")
     # Simulate HTTP call
     await asyncio.sleep(0.05)
+    # return data including config echo
+    return {"node": task.node_id, "url": task.config.get("url"), "fetched_at": time.time(), "user_id": task.config.get("user_id")}
+
+
+@dag.handler("call_external_service1")
+async def call_external_service(task: TaskMessage):
+    print(f"Received task {task.model_dump()}")
+    # Simulate HTTP call
+    await asyncio.sleep(50.01)
     # return data including config echo
     return {"node": task.node_id, "url": task.config.get("url"), "fetched_at": time.time(), "user_id": task.config.get("user_id")}
 
@@ -99,6 +109,7 @@ async def output_handler(task: TaskMessage):
 # --- Run the workflow ---
 async def main():
     result_store = RedisResultStore(redis)
+    idemp_store = RedisIdempotencyStore(redis)
     transport = RedisTransport(
         redis=redis,
         tasks_stream="engine:tasks",
@@ -126,15 +137,16 @@ async def main():
     await transport.init()
     await worker_transport.init()
     await worker2_transport.init()
-    store = RedisEventStore(redis)
-    dag_service = DagOrchestrator(dag, transport, result_store=result_store, event_store=store)
+    event_store = RedisEventStore(redis)
+    dag.event_store = event_store
+    dag_service = DagOrchestrator(dag, transport, idemp_store, result_store=result_store, event_store=event_store)
 
     # start DagOrchestrator (seed roots and start result subscription)
     await dag_service.start()
 
     # start external workers (they read tasks via transport)
-    worker1 = WorkflowWorker(worker_transport, dag.handlers, result_store=result_store, worker_id="w1")
-    worker2 = WorkflowWorker(worker2_transport, dag.handlers, result_store=result_store, worker_id="w2")
+    worker1 = WorkflowWorker(worker_transport, dag.handlers, idemp_store, result_store=result_store, worker_id="w1")
+    worker2 = WorkflowWorker(worker2_transport, dag.handlers, idemp_store, result_store=result_store, worker_id="w2")
 
     # run workers in background
     wtask1 = asyncio.create_task(worker1.run())
@@ -153,7 +165,7 @@ async def main():
 
     # collect outputs and events
     results = dag_service.collect_results()
-    events = await store.list_events(dag.workflow_id)
+    events = await event_store.list_events(dag.workflow_id)
 
     print("=== RESULTS ===")
     print(json.dumps(results, indent=2))

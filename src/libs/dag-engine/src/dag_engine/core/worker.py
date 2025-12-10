@@ -1,6 +1,7 @@
 import traceback
 import typing as t
 
+from dag_engine.idempotency_store import IdempotencyStore
 from dag_engine.result_store import ResultStore
 from dag_engine.transport import ResultType, ResultMessage, Transport, TaskMessage
 
@@ -23,6 +24,7 @@ class WorkflowWorker:
         self,
         transport: Transport,
         handler_registry: dict[str, Handler],
+        idempotency_store: IdempotencyStore,
         result_store: ResultStore | None = None,
         worker_id: str = "worker",
         result_ttl_seconds: int | None = None,
@@ -30,6 +32,7 @@ class WorkflowWorker:
         self.transport = transport
         self.handlers = handler_registry
         self.result_store = result_store
+        self.idempotency_store = idempotency_store
         self.worker_id = worker_id
         self._stop = False
         self.result_ttl = result_ttl_seconds
@@ -44,12 +47,22 @@ class WorkflowWorker:
                 return
             await self._handle_task(task)
 
+    async def already_processed(self, task: TaskMessage) -> bool:
+        exec_key = f"exec:{task.workflow_id}:{task.node_id}:{task.attempt}"
+        ok = await self.idempotency_store.set_if_absent(exec_key, ttl_seconds=3600)
+        if not ok:
+            return True
+        return False
+
     async def _handle_task(self, task: TaskMessage) -> None:
         """
         Execute the handler for the task.
         Persist result first (if ResultStore is enabled).
         Publish a ResultMessage (SUCCESS or FAILED).
         """
+        if await self.already_processed(task):
+            return
+
         handler = self.handlers.get(task.node_type)
 
         if handler is None:

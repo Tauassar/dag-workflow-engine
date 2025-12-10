@@ -7,11 +7,13 @@ from .entities import DagNode
 from .constants import NodeStatus
 from .exceptions import MissingDependencyError, TemplateResolutionError
 from .templates import TemplateResolver
+from .timeout_monitor import TimeoutMonitor
 from .workflow import WorkflowDAG
 from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
 from dag_engine.event_store import EventStore
 from dag_engine.transport import Transport, TaskMessage, ResultMessage, ResultType, InMemoryTransport
 from dag_engine.result_store import ResultStore
+from dag_engine.idempotency_store import IdempotencyStore
 
 logger = logging.getLogger(__name__)
 
@@ -31,17 +33,30 @@ class DagOrchestrator:
         self,
         dag: WorkflowDAG,
         transport: Transport,
+        idempotency_store: IdempotencyStore,
         event_store: EventStore | None = None,
         result_store: ResultStore | None = None,
+        idempotency_ttl_seconds: int | None = None,
         result_ttl_seconds: int | None = None,
         controller_id: str = "dag-service",
+        timeout_check_interval=1.0,
     ):
         self.dag = dag
         self.transport = transport
+        self.idempotency_store = idempotency_store
+        self.idempotency_ttl_seconds = idempotency_ttl_seconds
         self.event_store = event_store
         self.result_store = result_store
         self.result_ttl = result_ttl_seconds
         self.controller_id = controller_id
+
+        self.timeout_monitor = TimeoutMonitor(
+            dag=self.dag,
+            idempotency_store=self.idempotency_store,
+            event_handler=self._emit_event,
+            check_interval=timeout_check_interval,
+            dispatch_retry_callback=self._dispatch_retry,
+        )
 
         self._lock = asyncio.Lock()
         self._result_task: asyncio.Task | None = None
@@ -61,7 +76,17 @@ class DagOrchestrator:
         if self.event_store:
             await self.event_store.append(event)
 
+    async def already_processed(self, node: DagNode) -> bool:
+        dispatch_key = f"dispatch:{self.dag.workflow_id}:{node.id}:{node.attempt}"
+        ok = await self.idempotency_store.set_if_absent(dispatch_key, ttl_seconds=self.idempotency_ttl_seconds)
+        if not ok:
+            return True
+        return False
+
     async def _publish_task(self, node: DagNode) -> None:
+        if await self.already_processed(node):
+            return
+
         node.attempt += 1
 
         try:
@@ -84,6 +109,14 @@ class DagOrchestrator:
             await self.stop()
             raise
 
+        node.status = NodeStatus.RUNNING
+        node.started_at = time.time()
+        node.deadline_at = (
+            node.started_at + node.timeout_seconds
+            if node.timeout_seconds
+            else None
+        )
+
         await self._emit_event(
             WorkflowEvent(
                 workflow_id=self.dag.workflow_id,
@@ -103,6 +136,18 @@ class DagOrchestrator:
         )
         await self.transport.publish_task(task)
 
+    async def _dispatch_retry(self, node_id: str):
+        """
+        Called by TimeoutMonitor when a retry attempt must be dispatched.
+        """
+        node = self.dag.nodes[node_id]
+
+        # Check dependencies still valid
+        if not all(self.dag.nodes[d].status == NodeStatus.COMPLETED for d in node.depends_on):
+            return  # node now blocked or invalid
+
+        await self._publish_task(node)
+
     # ---------------------------------------------------------
     # Start execution (seed root nodes + start result listener)
     # ---------------------------------------------------------
@@ -118,6 +163,7 @@ class DagOrchestrator:
 
         # Start asynchronous loop for results
         self._result_task = asyncio.create_task(self._result_loop())
+        await self.timeout_monitor.start()
 
     # ---------------------------------------------------------
     # Result listener loop
@@ -136,12 +182,21 @@ class DagOrchestrator:
 
         async with self._lock:
             node = self.dag.nodes.get(res.node_id)
-            if node is None:
+            if node is None or node.status != NodeStatus.RUNNING:
+                logger.debug(
+                    f"Failed node {res.node_id} received result {res.payload}, discarding it"
+                )
                 return
 
             # Ignore stale results: attempt mismatch (stale response)
             if res.attempt != node.attempt:
+                # ignore stale/late result
+                logger.debug(
+                    f"Node {res.node_id}, received stale result {res.payload}"
+                )
                 return
+
+            logger.debug(f"Received result for node {res.node_id}, attempt {res.attempt}, node attempt {node.attempt}")
 
             if res.type == ResultType.COMPLETED:
                 await self._handle_success(node_id=res.node_id, res=res)
@@ -243,6 +298,7 @@ class DagOrchestrator:
             return
 
         # Permanent failure
+        await self.dag.block_dependents(node.id)
         node.status = NodeStatus.FAILED
         node.last_error = res.error
         node.finished_at = res.timestamp
@@ -315,6 +371,8 @@ class DagOrchestrator:
         if self._result_task:
             await self._result_task
 
+        await self.timeout_monitor.stop()
+
     # ---------------------------------------------------------
     # Collect summary of results for API/UI consumption
     # ---------------------------------------------------------
@@ -333,13 +391,6 @@ class DagOrchestrator:
                     "status": "FAILED",
                     "error": node.last_error,
                     "attempt": node.attempt,
-                }
-            elif node.status == NodeStatus.PENDING and any(
-                self.dag.nodes[d].status == NodeStatus.FAILED for d in node.depends_on
-            ):
-                results[node_id] = {
-                    "status": "BLOCKED",
-                    "blocked_by": [d for d in node.depends_on if self.dag.nodes[d].status == NodeStatus.FAILED]
                 }
             else:
                 results[node_id] = {"status": node.status.value}

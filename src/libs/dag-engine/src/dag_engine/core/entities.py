@@ -23,3 +23,4 @@ class DagNode:
     result: t.Any = None
     started_at: float | None = None
     finished_at: float | None = None
+    deadline_at: float | None = None

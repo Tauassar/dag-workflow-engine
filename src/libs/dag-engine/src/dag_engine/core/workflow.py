@@ -1,18 +1,24 @@
 from __future__ import annotations
 
+import logging
+import time
 import typing as t
 import asyncio
 import uuid
+from collections import deque
 
+from . import NodeStatus
 from .exceptions import DagValidationError
 from .schemas import (
     WorkflowDefinition,
 )
 from .entities import DagNode
-from dag_engine.event_store import InMemoryEventStore, EventStore
+from dag_engine.event_store import EventStore
 from dag_engine.transport import TaskMessage
+from ..event_sourcing import WorkflowEvent, WorkflowEventType
 
 
+logger = logging.getLogger(__name__)
 Handler = t.Callable[[TaskMessage], t.Awaitable[t.Any]]
 
 
@@ -23,8 +29,6 @@ class WorkflowDAG:
         event_store: EventStore | None = None,
         concurrency: int = 4,
     ) -> None:
-        if event_store is None:
-            event_store = InMemoryEventStore()
         self.event_store = event_store
 
         self.workflow_name = definition.name
@@ -33,7 +37,14 @@ class WorkflowDAG:
 
         # try to construct DAG workflow
         for nd in definition.dag.nodes:
-            node = DagNode(id=nd.id, type=nd.type, config=nd.config, depends_on=set(nd.depends_on))
+            node = DagNode(
+                id=nd.id,
+                type=nd.type,
+                config=nd.config,
+                depends_on=set(nd.depends_on),
+                timeout_seconds=nd.timeout_seconds,
+                retry_policy=nd.retry_policy,
+            )
             self._nodes[node.id] = node
 
         for n in self._nodes.values():
@@ -53,8 +64,12 @@ class WorkflowDAG:
         self._inflight = set()
         self._lock = asyncio.Lock()
 
+    async def _emit_event(self, event: WorkflowEvent) -> None:
+        if self.event_store:
+            await self.event_store.append(event)
+
     @property
-    def nodes(self):
+    def nodes(self) -> dict[str, DagNode]:
         return self._nodes
 
     @property
@@ -90,3 +105,66 @@ class WorkflowDAG:
             self._register_handler(node_type, func)
             return func
         return decorator
+
+    async def block_dependents(self, node_id: str):
+        """
+        Mark all downstream nodes of `node_id` as FAILED(BLOCKED).
+        A node becomes FAILED(BLOCKED) if ANY of its parents is FAILED.
+        Runs bfs to propagate blocking through the DAG.
+        """
+
+        failed_node = self.nodes[node_id]
+        if failed_node.status != NodeStatus.FAILED:
+            return
+
+        queue = deque([node_id])
+        visited = set()
+
+        while queue:
+            current_id = queue.popleft()
+            if current_id in visited:
+                continue
+            visited.add(current_id)
+
+            current_node = self.nodes[current_id]
+
+            # Process all direct dependents
+            for child_id in current_node.dependents:
+                child = self.nodes[child_id]
+
+                # Skip nodes that are already terminal (SUCCESS or FAILED)
+                if child.status in (NodeStatus.COMPLETED, NodeStatus.FAILED):
+                    continue
+
+                # Only block if any dependency is FAILED
+                failed_parents = [
+                    pid for pid in child.depends_on
+                    if self.nodes[pid].status == NodeStatus.FAILED
+                ]
+
+                if failed_parents:
+                    # Better to use BLOCKED status
+                    logger.info(f"Marking node {child.id} as blocked since parent nodes {failed_parents} are failed")
+                    child.status = NodeStatus.FAILED
+                    child.finished_at = time.time()
+                    child.started_at = None
+                    child.deadline_at = None
+
+                    await self._emit_event(
+                        WorkflowEvent(
+                            workflow_id=self.workflow_id,
+                            workflow_name=self.workflow_name,
+                            node_id=child.id,
+                            event_type=WorkflowEventType.NODE_BLOCKED,
+                            attempt=child.attempt,
+                            payload={"blocked_by": failed_parents},
+                        )
+                    )
+
+                    # Continue propagation: child may have dependents to block as well
+                    queue.append(child_id)
+
+                else:
+                    # Parent failed but child still has other running dependencies?
+                    # We do *not* block yet — it may still run if all parents eventually succeed.
+                    pass
