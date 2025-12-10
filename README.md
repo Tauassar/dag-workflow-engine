@@ -13,12 +13,6 @@ Moved to [settings](https://cookiecutter-django.readthedocs.io/en/latest/1-getti
 
 ## Basic Commands
 
-### Type checks
-
-Running type checks with mypy:
-
-    uv run mypy fil_management_project
-
 ### Test coverage
 
 To run the tests, check your test coverage, and generate an HTML coverage report:
