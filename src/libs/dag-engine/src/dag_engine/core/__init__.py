@@ -6,7 +6,7 @@ from .schemas import (
     WorkflowDefinition,
 )
 from .entities import DagNode
-from .services import DagService
+from .orchestrator import DagOrchestrator
 from .worker import WorkflowWorker
 from .exceptions import DagEngineException, DagValidationError
 from .workflow import WorkflowDAG
@@ -19,7 +19,7 @@ __all__ = (
     "DAGDefinition",
     "WorkflowDefinition",
     "DagNode",
-    "DagService",
+    "DagOrchestrator",
     "WorkflowWorker",
     "DagEngineException",
     "DagValidationError",

@@ -14,7 +14,7 @@ class RedisTransport(Transport):
     """
     Redis Streams transport.
 
-    All routing is done by DagService + Worker.
+    All routing is done by DagOrchestrator + Worker.
 
     Streams are generic:
         - tasks_stream
@@ -114,7 +114,7 @@ class RedisTransport(Transport):
                         await self.redis.xdel(self.tasks_stream, msg_id)
 
     # -------------------------------------------------------
-    # Subscribe to results (DagService)
+    # Subscribe to results (DagOrchestrator)
     # -------------------------------------------------------
     async def subscribe_results(self) -> AsyncIterator[ResultMessage]:
         while True:

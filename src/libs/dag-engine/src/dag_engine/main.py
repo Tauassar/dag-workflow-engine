@@ -4,7 +4,7 @@ import json
 import asyncio, time
 import logging
 
-from dag_engine.core import DagService,  WorkflowWorker
+from dag_engine.core import DagOrchestrator,  WorkflowWorker
 from dag_engine.event_store import RedisEventStore
 from dag_engine.result_store.redis import RedisResultStore
 from dag_engine.transport import TaskMessage, InMemoryTransport, RedisTransport
@@ -90,7 +90,7 @@ async def call_external_service(task: TaskMessage):
 @dag.handler("output")
 async def output_handler(task: TaskMessage):
     await asyncio.sleep(0.01)
-    return {"node": task.node_id, "aggregated": True, "note": "aggregation done by DAGService", "ctx": task}
+    return {"node": task.node_id, "aggregated": True, "note": "aggregation done by DagOrchestrator", "ctx": task}
 
 
 
@@ -103,7 +103,7 @@ async def main():
         results_stream="engine:results",
         task_group="engine-task-group",
         result_group="engine-result-group",
-        consumer_name="controller",   # for DagService
+        consumer_name="controller",   # for DagOrchestrator
     )
     worker_transport = RedisTransport(
         redis=redis,
@@ -125,9 +125,9 @@ async def main():
     await worker_transport.init()
     await worker2_transport.init()
     store = RedisEventStore(redis)
-    dag_service = DagService(dag, transport, result_store=result_store, event_store=store)
+    dag_service = DagOrchestrator(dag, transport, result_store=result_store, event_store=store)
 
-    # start DagService (seed roots and start result subscription)
+    # start DagOrchestrator (seed roots and start result subscription)
     await dag_service.start()
 
     # start external workers (they read tasks via transport)
@@ -138,7 +138,7 @@ async def main():
     wtask1 = asyncio.create_task(worker1.run())
     wtask2 = asyncio.create_task(worker2.run())
 
-    # wait for workflow to finish (DagService watches results and updates DAG)
+    # wait for workflow to finish (DagOrchestrator watches results and updates DAG)
     await dag_service.wait_until_finished()
 
     # stop workers & close transport to end their subscribe_tasks loops

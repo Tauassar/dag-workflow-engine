@@ -12,9 +12,9 @@ from dag_engine.result_store.protocol import ResultStore
 logger = logging.getLogger(__name__)
 
 
-class DagService:
+class DagOrchestrator:
     """
-    DagService:
+    DagOrchestrator:
         - Owns and mutates the WorkflowDAG state
         - Listens for ResultMessage from workers via Transport
         - Publishes TaskMessage for runnable nodes
@@ -314,7 +314,7 @@ class DagService:
     # ---------------------------------------------------------
     async def stop(self) -> None:
         """
-        Stop the DagService's background result loop.
+        Stop the DagOrchestrator's background result loop.
         For RedisTransport, this is triggered by closing result stream.
         """
         if hasattr(self.transport, "close_results"):
