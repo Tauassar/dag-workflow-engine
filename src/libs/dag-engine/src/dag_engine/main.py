@@ -81,6 +81,7 @@ async def input_handler(task: TaskMessage):
 
 @dag.handler("call_external_service")
 async def call_external_service(task: TaskMessage):
+    print(f"Received task {task.model_dump()}")
     # Simulate HTTP call
     await asyncio.sleep(0.05)
     # return data including config echo

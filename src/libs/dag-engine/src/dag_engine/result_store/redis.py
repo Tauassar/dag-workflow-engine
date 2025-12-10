@@ -3,7 +3,7 @@ import time
 from typing import Any, Dict, Optional
 from redis.asyncio import Redis
 
-from dag_engine.serializer.json import JSONResultSerializer
+from dag_engine.serializer import JSONResultSerializer
 
 from .protocol import ResultStore
 
