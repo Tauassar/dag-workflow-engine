@@ -27,7 +27,6 @@ class WorkflowDAG:
         self,
         definition: WorkflowDefinition,
         event_store: EventStore | None = None,
-        concurrency: int = 4,
     ) -> None:
         self.event_store = event_store
 
@@ -58,7 +57,6 @@ class WorkflowDAG:
         self._validate_acyclic()
 
         self._handlers_by_type = {}
-        self.concurrency = max(1, concurrency)
 
         self._task_queue: asyncio.Queue = asyncio.Queue()
         self._inflight = set()
