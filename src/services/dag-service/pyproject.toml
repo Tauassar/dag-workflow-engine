@@ -1,5 +1,5 @@
 [project]
-name = "dag-web-api"
+name = "dag-service"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -18,7 +18,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-zeebe-consumer = "dag_web_api.main:main"
+dag-service = "dag_service.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/dag_web_api"]
+packages = ["src/dag_service"]
