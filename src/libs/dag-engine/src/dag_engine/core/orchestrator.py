@@ -1,8 +1,12 @@
 import asyncio
 import logging
+import time
 import typing as t
 
+from .entities import DagNode
 from .constants import NodeStatus
+from .exceptions import MissingDependencyError, TemplateResolutionError
+from .templates import TemplateResolver
 from .workflow import WorkflowDAG
 from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
 from dag_engine.event_store import EventStore
@@ -42,12 +46,62 @@ class DagOrchestrator:
         self._lock = asyncio.Lock()
         self._result_task: asyncio.Task | None = None
 
-    # ---------------------------------------------------------
-    # Helper: Emit event (safe even if event_store is None)
-    # ---------------------------------------------------------
+        # template resolver uses an async result provider
+        self.template_resolver = TemplateResolver(
+            result_provider=self._async_read_node_result_value
+        )
+
+    async def _async_read_node_result_value(self, workflow_id: str, node_id: str) -> t.Any:
+        if self.result_store:
+            stored = await self.result_store.get_result(workflow_id, node_id)
+            return stored["result"] if stored else None
+        return self.dag.nodes[node_id].result
+
     async def _emit_event(self, event: WorkflowEvent) -> None:
         if self.event_store:
             await self.event_store.append(event)
+
+    async def _publish_task(self, node: DagNode) -> None:
+        node.attempt += 1
+
+        try:
+            resolved_config = await self.template_resolver.resolve(self.dag.workflow_id, node.config)
+        except (MissingDependencyError, TemplateResolutionError) as e:
+            logger.error(f"Failed to resolve template, finishing execution: {e}", exc_info=True)
+            node.status = NodeStatus.FAILED
+            node.last_error = e
+            node.finished_at = time.time()
+            await self._emit_event(
+                WorkflowEvent(
+                    workflow_id=self.dag.workflow_id,
+                    workflow_name=self.dag.workflow_name,
+                    node_id=node.id,
+                    event_type=WorkflowEventType.NODE_FAILED,
+                    attempt=node.attempt,
+                    payload={"error": e},
+                )
+            )
+            await self.stop()
+            raise
+
+        await self._emit_event(
+            WorkflowEvent(
+                workflow_id=self.dag.workflow_id,
+                workflow_name=self.dag.workflow_name,
+                node_id=node.id,
+                event_type=WorkflowEventType.NODE_STARTED,
+                attempt=node.attempt,
+            )
+        )
+        task = TaskMessage(
+            workflow_id=self.dag.workflow_id,
+            workflow_name=self.dag.workflow_name,
+            node_id=node.id,
+            node_type=node.type,
+            attempt=node.attempt,
+            config=resolved_config,
+        )
+        await self.transport.publish_task(task)
 
     # ---------------------------------------------------------
     # Start execution (seed root nodes + start result listener)
@@ -58,30 +112,9 @@ class DagOrchestrator:
         Starts background result-processing loop.
         """
         async with self._lock:
-            for node_id, node in self.dag.nodes.items():
+            for _, node in self.dag.nodes.items():
                 if not node.depends_on and node.status == NodeStatus.PENDING:
-                    node.attempt += 1
-
-                    # Emit started event
-                    await self._emit_event(
-                        WorkflowEvent(
-                            workflow_id=self.dag.workflow_id,
-                            workflow_name=self.dag.workflow_name,
-                            node_id=node_id,
-                            event_type=WorkflowEventType.NODE_STARTED,
-                            attempt=node.attempt,
-                        )
-                    )
-
-                    task = TaskMessage(
-                        workflow_id=self.dag.workflow_id,
-                        workflow_name=self.dag.workflow_name,
-                        node_id=node_id,
-                        node_type=node.type,
-                        attempt=node.attempt,
-                        config=node.config,
-                    )
-                    await self.transport.publish_task(task)
+                    await self._publish_task(node)
 
         # Start asynchronous loop for results
         self._result_task = asyncio.create_task(self._result_loop())
@@ -106,7 +139,7 @@ class DagOrchestrator:
             if node is None:
                 return
 
-            # Ignore stale results: attempt mismatch
+            # Ignore stale results: attempt mismatch (stale response)
             if res.attempt != node.attempt:
                 return
 
@@ -126,7 +159,7 @@ class DagOrchestrator:
         loaded_result = None
 
         if isinstance(payload, dict) and "result_key" in payload:
-            # Worker stored result in Redis, so we fetch it
+            # Worker stored result in persistent storage, so we fetch it
             if self.result_store:
                 stored = await self.result_store.get_result(res.workflow_id, node_id)
                 if stored:
@@ -167,27 +200,8 @@ class DagOrchestrator:
             if dep.status == NodeStatus.PENDING and all(
                 self.dag.nodes[d].status == NodeStatus.COMPLETED for d in dep.depends_on
             ):
-                dep.attempt += 1
+                await self._publish_task(dep)
 
-                await self._emit_event(
-                    WorkflowEvent(
-                        workflow_name=self.dag.workflow_name,
-                        workflow_id=res.workflow_id,
-                        node_id=dep_id,
-                        event_type=WorkflowEventType.NODE_STARTED,
-                        attempt=dep.attempt,
-                    )
-                )
-
-                task = TaskMessage(
-                    workflow_id=res.workflow_id,
-                    workflow_name=self.dag.workflow_name,
-                    node_id=dep_id,
-                    node_type=dep.type,
-                    attempt=dep.attempt,
-                    config=dep.config,
-                )
-                await self.transport.publish_task(task)
 
     # ---------------------------------------------------------
     # FAILURE HANDLING
@@ -244,8 +258,6 @@ class DagOrchestrator:
             )
         )
 
-        # Dependents remain PENDING (blocked)
-
     # ---------------------------------------------------------
     # Retry logic (delayed republish)
     # ---------------------------------------------------------
@@ -259,27 +271,7 @@ class DagOrchestrator:
             if node.status == NodeStatus.PENDING and all(
                 self.dag.nodes[d].status == NodeStatus.COMPLETED for d in node.depends_on
             ):
-                node.attempt += 1
-
-                await self._emit_event(
-                    WorkflowEvent(
-                        workflow_id=self.dag.workflow_id,
-                        workflow_name=self.dag.workflow_name,
-                        node_id=node_id,
-                        event_type=WorkflowEventType.NODE_STARTED,
-                        attempt=node.attempt,
-                    )
-                )
-
-                task = TaskMessage(
-                    workflow_id=self.dag.workflow_id,
-                    workflow_name=self.dag.workflow_name,
-                    node_id=node_id,
-                    node_type=node.type,
-                    attempt=node.attempt,
-                    config=node.config,
-                )
-                await self.transport.publish_task(task)
+                await self._publish_task(node)
 
     # ---------------------------------------------------------
     # Wait for DAG to finish

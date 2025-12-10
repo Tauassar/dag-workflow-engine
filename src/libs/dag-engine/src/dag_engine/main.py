@@ -38,7 +38,8 @@ USER_JSON = """{
         "handler": "call_external_service",
         "dependencies": ["input"],
         "config": {
-          "url": "http://localhost:8911/document/policy/list"
+          "url": "http://localhost:8911/document/policy/list/{{input.input_payload.user_id}}",
+          "user_id": "{{input.input_payload.user_id}}"
         }
       },
       {
@@ -85,7 +86,7 @@ async def call_external_service(task: TaskMessage):
     # Simulate HTTP call
     await asyncio.sleep(0.05)
     # return data including config echo
-    return {"node": task.node_id, "url": task.config.get("url"), "fetched_at": time.time()}
+    return {"node": task.node_id, "url": task.config.get("url"), "fetched_at": time.time(), "user_id": task.config.get("user_id")}
 
 
 @dag.handler("output")
