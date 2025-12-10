@@ -6,7 +6,7 @@ import logging
 
 from dag_engine.core import DagOrchestrator,  WorkflowWorker
 from dag_engine.event_store import RedisEventStore
-from dag_engine.result_store.redis import RedisResultStore
+from dag_engine.result_store import RedisResultStore
 from dag_engine.transport import TaskMessage, InMemoryTransport, RedisTransport
 from .core.workflow import WorkflowDAG
 from redis.asyncio import Redis

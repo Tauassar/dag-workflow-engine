@@ -1,7 +1,7 @@
 import traceback
 import typing as t
 
-from dag_engine.result_store.protocol import ResultStore
+from dag_engine.result_store import ResultStore
 from dag_engine.transport import ResultType, ResultMessage, Transport, TaskMessage
 
 
