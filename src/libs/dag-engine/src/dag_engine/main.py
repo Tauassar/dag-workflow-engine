@@ -73,7 +73,7 @@ USER_JSON = """{
   }
 }"""
 
-dag = WorkflowDAG.from_dict(json.loads(USER_JSON), concurrency=3)
+dag = WorkflowDAG.from_dict(json.loads(USER_JSON))
 
 @dag.handler("input")
 async def input_handler(task: TaskMessage):
@@ -94,7 +94,7 @@ async def call_external_service(task: TaskMessage):
 async def call_external_service(task: TaskMessage):
     print(f"Received task {task.model_dump()}")
     # Simulate HTTP call
-    await asyncio.sleep(50.01)
+    await asyncio.sleep(0.01)
     # return data including config echo
     return {"node": task.node_id, "url": task.config.get("url"), "fetched_at": time.time(), "user_id": task.config.get("user_id")}
 
