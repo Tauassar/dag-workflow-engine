@@ -1,9 +1,13 @@
 import json
+import logging
 from typing import AsyncIterator
 from redis.asyncio import Redis
 
 from .messages import TaskMessage, ResultMessage
 from .protocols import Transport
+
+
+logger = logging.getLogger(__name__)
 
 
 class RedisTransport(Transport):
@@ -66,16 +70,18 @@ class RedisTransport(Transport):
     # Publish
     # -------------------------------------------------------
     async def publish_task(self, task: TaskMessage) -> None:
+        logger.debug("Publishing task: %s", {"json": task.model_dump_json()})
         await self.redis.xadd(
             self.tasks_stream,
-            {"json": task.json()},
+            {"json": task.model_dump_json()},
             id="*"
         )
 
     async def publish_result(self, result: ResultMessage) -> None:
+        logger.debug("Publishing result: %s", {"json": result.model_dump_json()})
         await self.redis.xadd(
             self.results_stream,
-            {"json": result.json()},
+            {"json": result.model_dump_json()},
             id="*"
         )
 
@@ -99,7 +105,7 @@ class RedisTransport(Transport):
                     try:
                         raw = fields.get(b"json") or fields.get("json")
                         data = json.loads(raw)
-                        task = TaskMessage.parse_obj(data)
+                        task = TaskMessage.model_validate(data)
                         yield task
                     except Exception as e:
                         print("task decode failure:", e)
@@ -127,7 +133,7 @@ class RedisTransport(Transport):
                     try:
                         raw = fields.get(b"json") or fields.get("json")
                         data = json.loads(raw)
-                        result = ResultMessage.parse_obj(data)
+                        result = ResultMessage.model_validate(data)
                         yield result
                     except Exception as e:
                         print("result decode failure:", e)

@@ -5,14 +5,24 @@ import asyncio, time
 import logging
 
 from dag_engine.core import DagService,  WorkflowWorker
-from dag_engine.event_store import InMemoryEventStore, RedisEventStore
+from dag_engine.event_store import RedisEventStore
+from dag_engine.result_store.redis import RedisResultStore
 from dag_engine.transport import TaskMessage, InMemoryTransport, RedisTransport
 from .core.workflow import WorkflowDAG
 from redis.asyncio import Redis
 
 redis = Redis(host="localhost", port=6379, decode_responses=True)
 
-logging.basicConfig(level=logging.DEBUG)
+LOG_FORMAT = (
+    "%(asctime)s [%(levelname)s] "
+    "%(filename)s:%(lineno)d (%(funcName)s) — %(message)s"
+)
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format=LOG_FORMAT,
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 USER_JSON = """{
   "name": "Parallel API Fetcher",
@@ -86,6 +96,7 @@ async def output_handler(task: TaskMessage):
 
 # --- Run the workflow ---
 async def main():
+    result_store = RedisResultStore(redis)
     transport = RedisTransport(
         redis=redis,
         tasks_stream="engine:tasks",
@@ -114,14 +125,14 @@ async def main():
     await worker_transport.init()
     await worker2_transport.init()
     store = RedisEventStore(redis)
-    dag_service = DagService(dag, transport, event_store=store)
+    dag_service = DagService(dag, transport, result_store=result_store, event_store=store)
 
     # start DagService (seed roots and start result subscription)
     await dag_service.start()
 
     # start external workers (they read tasks via transport)
-    worker1 = WorkflowWorker(worker_transport, dag.handlers, worker_id="w1")
-    worker2 = WorkflowWorker(worker2_transport, dag.handlers, worker_id="w2")
+    worker1 = WorkflowWorker(worker_transport, dag.handlers, result_store=result_store, worker_id="w1")
+    worker2 = WorkflowWorker(worker2_transport, dag.handlers, result_store=result_store, worker_id="w2")
 
     # run workers in background
     wtask1 = asyncio.create_task(worker1.run())
@@ -143,7 +154,7 @@ async def main():
     events = await store.list_events(dag.workflow_id)
 
     print("=== RESULTS ===")
-    print(results)
+    print(json.dumps(results, indent=2))
     print("\n=== EVENTS ===")
     for e in events:
         print(e.model_dump())

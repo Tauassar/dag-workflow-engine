@@ -1,0 +1,6 @@
+import typing as t
+
+
+class Serializer(t.Protocol):
+    def dumps(self, value: t.Any) -> bytes: ...
+    def loads(self, data: bytes) -> t.Any: ...
