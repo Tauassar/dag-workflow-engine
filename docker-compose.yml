@@ -1,0 +1,45 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+#  api:
+#    build:
+#      context: ./api
+#    container_name: wf_api
+#    depends_on:
+#      - redis
+#    ports:
+#      - "8000:8000"
+#    environment:
+#      - REDIS_URL=redis://redis:6379/0
+#
+#  orchestrator:
+#    build:
+#      context: ./orchestrator
+#    container_name: wf_orchestrator
+#    depends_on:
+#      - redis
+#    environment:
+#      - REDIS_URL=redis://redis:6379/0
+#      - CONSUMER_GROUP_WORKERS=wg-workers
+#      - CONSUMER_GROUP_RESULTS=wg-results
+#
+#  worker:
+#    build:
+#      context: ./worker
+#    container_name: wf_worker
+#    depends_on:
+#      - redis
+#    environment:
+#      - REDIS_URL=redis://redis:6379/0
+#      - CONSUMER_GROUP=wg-workers
+#      - CONSUMER_NAME=worker-1
+
+volumes:
+  redis_data:

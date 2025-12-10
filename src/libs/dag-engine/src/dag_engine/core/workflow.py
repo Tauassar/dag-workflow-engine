@@ -9,7 +9,7 @@ from .schemas import (
     WorkflowDefinition,
 )
 from .entities import DagNode
-from dag_engine.store import InMemoryEventStore, EventStore
+from dag_engine.event_store import InMemoryEventStore, EventStore
 from dag_engine.transport import TaskMessage
 
 
