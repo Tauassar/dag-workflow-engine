@@ -67,10 +67,11 @@ class RedisResultStore(ResultStore):
         data = json.dumps(payload)
         key = self.get_key(workflow_id, node_id)
 
+        # NX ensures idempotency (only first writer wins)
         if ttl_seconds is None:
-            await self.redis.set(key, data)
+            await self.redis.set(key, data, nx=True)
         else:
-            await self.redis.set(key, data, ex=int(ttl_seconds))
+            await self.redis.set(key, data, ex=int(ttl_seconds), nx=True)
 
     # --------------------------------------------------------
     # Fetch result for a single node
