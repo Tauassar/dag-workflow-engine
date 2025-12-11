@@ -40,6 +40,7 @@ class DagOrchestrator:
         result_ttl_seconds: int | None = None,
         controller_id: str = "dag-service",
         timeout_check_interval=1.0,
+        on_complete: t.Callable[[str], t.Awaitable[None]] | None = None,
     ):
         self.dag = dag
         self.transport = transport
@@ -49,6 +50,7 @@ class DagOrchestrator:
         self.result_store = result_store
         self.result_ttl = result_ttl_seconds
         self.controller_id = controller_id
+        self.on_complete = on_complete
 
         self.timeout_monitor = TimeoutMonitor(
             dag=self.dag,
@@ -65,6 +67,23 @@ class DagOrchestrator:
         self.template_resolver = TemplateResolver(
             result_provider=self._async_read_node_result_value
         )
+
+    def _is_finished(self) -> bool:
+        """
+        Workflow is terminal if all nodes are in SUCCESS, FAILED, or BLOCKED.
+        """
+        for node in self.dag.nodes.values():
+            if node.status in (NodeStatus.RUNNING, NodeStatus.PENDING):
+                failed_parents = [
+                    p for p in node.depends_on
+                    if self.dag.nodes[p].status == NodeStatus.FAILED
+                ]
+                if failed_parents:
+                    node.status = NodeStatus.FAILED
+                    node.blocked_by = failed_parents
+                else:
+                    return False
+        return True
 
     async def _async_read_node_result_value(self, workflow_id: str, node_id: str) -> t.Any:
         if self.result_store:
@@ -144,6 +163,7 @@ class DagOrchestrator:
 
         # Check dependencies still valid
         if not all(self.dag.nodes[d].status == NodeStatus.COMPLETED for d in node.depends_on):
+            await self._check_complete()
             return  # node now blocked or invalid
 
         await self._publish_task(node)
@@ -171,6 +191,12 @@ class DagOrchestrator:
     async def _result_loop(self) -> None:
         async for result in self.transport.subscribe_results():
             await self._handle_result(result)
+
+    async def _check_complete(self):
+        # check completion
+        if self._is_finished():
+            if self.on_complete:
+                await self.on_complete(self.dag.workflow_id)
 
     # ---------------------------------------------------------
     # Core: Handling ResultMessage sent by workers
@@ -202,6 +228,8 @@ class DagOrchestrator:
                 await self._handle_success(node_id=res.node_id, res=res)
             else:
                 await self._handle_failure(node_id=res.node_id, res=res)
+
+            await self._check_complete()
 
     # ---------------------------------------------------------
     # SUCCESS HANDLING
@@ -313,6 +341,7 @@ class DagOrchestrator:
                 payload={"error": res.error},
             )
         )
+        await self._check_complete()
 
     # ---------------------------------------------------------
     # Retry logic (delayed republish)

@@ -33,5 +33,14 @@ services:
     depends_on:
       - redis
 
+  worker2:
+    <<: *base
+    environment:
+      SERVICE_NAME: dag-service
+      SERVICE_TYPE: worker
+      REDIS_HOST: redis
+    depends_on:
+      - redis
+
 volumes:
   redis_data:

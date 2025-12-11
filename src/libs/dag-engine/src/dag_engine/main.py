@@ -2,6 +2,8 @@ from __future__ import annotations
 import json
 
 import asyncio, time
+import logging
+import uuid
 
 from dag_engine.core import DagOrchestrator,  WorkflowWorker
 from dag_engine.core.handlers import hregistry
@@ -13,6 +15,11 @@ from .core.workflow import WorkflowDAG
 from redis.asyncio import Redis
 
 redis = Redis(host="localhost", port=6379, decode_responses=True)
+
+logging.basicConfig(
+    level="DEBUG",
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+)
 
 LOG_FORMAT = (
     "%(asctime)s [%(levelname)s] "
@@ -73,7 +80,7 @@ USER_JSON = """{
   }
 }"""
 
-dag = WorkflowDAG.from_dict(json.loads(USER_JSON))
+dag = WorkflowDAG.from_dict(json.loads(USER_JSON), workflow_id=str(uuid.uuid4()))
 
 @hregistry.handler("input")
 async def input_handler(task: TaskMessage):

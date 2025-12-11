@@ -22,12 +22,11 @@ class WorkflowInfo:
         workflow_id: str,
         dag: WorkflowDAG,
         service: DagOrchestrator,
-        created_at: float,
     ):
         self.workflow_id = workflow_id
         self.dag = dag
         self.service = service
-        self.created_at = created_at
+        self.created_at = time.time()
         self.completed_at: float | None = None
         self.status: str = "RUNNING"
         self.error: str | None = None
@@ -61,12 +60,31 @@ class WorkflowManager:
         self.result_store = result_store
         self.idempotency_store = idempotency_store
         self.event_store = event_store
-        # workflow_id → WorkflowInfo
-        self.workflows: dict[str, WorkflowInfo] = {}
 
+        self.workflows: dict[str, WorkflowInfo] = {}
         self._lock = asyncio.Lock()
 
-    # ------------------------------------------------------------------
+    # ----------------------------------------------------------
+    async def _on_workflow_complete(self, workflow_id: str):
+        """
+        Called by DagOrchestrator when DAG reaches terminal state.
+        """
+        async with self._lock:
+            info = self.workflows.get(workflow_id)
+            if not info:
+                return
+
+            summary = info.service.collect_results()
+
+            if any(v["status"] == "FAILED" for v in summary.values()):
+                info.status = "FAILED"
+            elif any(v["status"] == "BLOCKED" for v in summary.values()):
+                info.status = "BLOCKED"
+            else:
+                info.status = "COMPLETED"
+
+            info.completed_at = time.time()
+
     async def start_workflow(self, workflow_id: str, definition: WorkflowDefinition) -> WorkflowInfo:
         """
         Starts a new workflow execution and registers it.
@@ -75,21 +93,25 @@ class WorkflowManager:
             if workflow_id in self.workflows:
                 raise ValueError(f"Workflow {workflow_id} already exists")
 
-            dag = WorkflowDAG.from_definition(definition, workflow_id=workflow_id, event_store=self.event_store)
+            dag = WorkflowDAG.from_definition(
+                definition,
+                workflow_id=workflow_id,
+                event_store=self.event_store
+            )
 
             service = DagOrchestrator(
                 dag=dag,
                 transport=self.transport,
                 result_store=self.result_store,
                 idempotency_store=self.idempotency_store,
-                event_store=self.event_store
+                event_store=self.event_store,
+                on_complete=self._on_workflow_complete,
             )
 
             info = WorkflowInfo(
                 workflow_id=workflow_id,
                 dag=dag,
                 service=service,
-                created_at=time.time(),
             )
 
             self.workflows[workflow_id] = info
@@ -97,37 +119,6 @@ class WorkflowManager:
         await service.start()
         return info
 
-    # ------------------------------------------------------------------
-    async def wait_until_finished(self, workflow_id: str) -> WorkflowInfo:
-        """
-        Block until workflow finishes, then returns final info.
-        """
-        info = self.workflows.get(workflow_id)
-        if not info:
-            raise ValueError(f"Workflow {workflow_id} does not exist")
-
-        try:
-            await info.service.wait_until_finished()
-        except Exception as exc:
-            info.status = "FAILED"
-            info.error = str(exc)
-            info.completed_at = time.time()
-            return info
-
-        # summarize results
-        summary = info.service.collect_results()
-
-        # determine global workflow status
-        if any(v["status"] == "FAILED" for v in summary.values()):
-            info.status = "FAILED"
-        else:
-            info.status = "COMPLETED"
-
-        info.completed_at = time.time()
-
-        return info
-
-    # ------------------------------------------------------------------
     def get_status(self, workflow_id: str) -> dict[str, t.Any]:
         """
         Returns current known status of workflow.
@@ -136,14 +127,10 @@ class WorkflowManager:
         if not info:
             raise ValueError(f"Workflow {workflow_id} not found")
 
-        service = info.service
-
-        data = {
+        return {
             "workflow_id": workflow_id,
             "state": info.status,
             "created_at": info.created_at,
             "completed_at": info.completed_at,
-            "nodes": service.collect_results() if info.status != "RUNNING" else None,
         }
 
-        return data
