@@ -1,7 +1,8 @@
 import logging
 import uuid
 
-from dag_engine.core import WorkflowDefinition as WorkflowDefinitionSchema, WorkflowDAG, DagValidationError
+from dag_engine.core import DagValidationError, WorkflowDAG
+from dag_engine.core import WorkflowDefinition as WorkflowDefinitionSchema
 from dag_engine.core import WorkflowManager
 from dag_service.ioc import AppContainer, get_container
 from dag_service.store import WorkflowDefinitionStore
@@ -24,7 +25,9 @@ def get_manager(container: AppContainer = Depends(get_container)) -> WorkflowMan
 
 @v1_router.post("/workflow")
 async def register_workflow(
-    definition: WorkflowDefinition, definition_store: WorkflowDefinitionStore = Depends(get_definition_store), manager: WorkflowManager = Depends(get_manager)
+    definition: WorkflowDefinition,
+    definition_store: WorkflowDefinitionStore = Depends(get_definition_store),
+    manager: WorkflowManager = Depends(get_manager),
 ):
     execution_id = str(uuid.uuid4())
     try:

@@ -182,7 +182,9 @@ class DagOrchestrator:
     # Result listener loop
     # ---------------------------------------------------------
     async def _result_loop(self) -> None:
-        async for result in t.cast(t.AsyncIterator[ResultMessage], self.transport.subscribe_results(wf_id=self.dag.workflow_id)):
+        async for result in t.cast(
+            t.AsyncIterator[ResultMessage], self.transport.subscribe_results(wf_id=self.dag.workflow_id)
+        ):
             if self._stop:
                 break
 
@@ -202,7 +204,9 @@ class DagOrchestrator:
     async def _handle_result(self, res: ResultMessage) -> None:
         if res.workflow_id != self.dag.workflow_id:
             # Ignore results belonging to a different workflow
-            logger.debug(f"Received result for workflow {self.dag.workflow_id}, but looking for {self.dag.workflow_id}, discarding it")
+            logger.debug(
+                f"Received result for workflow {self.dag.workflow_id}, but looking for {self.dag.workflow_id}, discarding it"
+            )
             return
 
         async with self._lock:
@@ -397,8 +401,7 @@ class DagOrchestrator:
 
         if hasattr(self.transport, "_destroy_consumer_group"):
             await self.transport._destroy_consumer_group(
-                stream=self.results_stream,
-                group=self.transport.result_group+self.dag.workflow_id
+                stream=self.transport.results_stream, group=self.transport.result_group + self.dag.workflow_id  # type: ignore[attr-defined]
             )
 
         await self.timeout_monitor.stop()
