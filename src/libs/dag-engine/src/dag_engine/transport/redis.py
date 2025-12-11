@@ -64,6 +64,13 @@ class RedisTransport(Transport):
             # group already exists
             pass
 
+    async def _destroy_consumer_group(self, stream: str, group: str):
+        try:
+            await self.redis.xgroup_destroy(name=stream, groupname=group)
+        except Exception:
+            # group already exists
+            pass
+
     # -------------------------------------------------------
     # Publish
     # -------------------------------------------------------
@@ -106,10 +113,12 @@ class RedisTransport(Transport):
     # -------------------------------------------------------
     # Subscribe to results (DagOrchestrator)
     # -------------------------------------------------------
-    async def subscribe_results(self) -> t.AsyncIterator[ResultMessage]:  # type: ignore[override]
+    async def subscribe_results(self, wf_id: str = "") -> t.AsyncIterator[ResultMessage]:  # type: ignore[override]
+        groupname = self.result_group+wf_id
+        await self._ensure_consumer_group(self.results_stream, groupname)
         while True:
             resp = await self.redis.xreadgroup(
-                groupname=self.result_group,
+                groupname=groupname,
                 consumername=self.consumer_name + "-r",
                 streams={self.results_stream: ">"},
                 count=1,

@@ -63,6 +63,7 @@ class DagOrchestrator:
 
         self._lock = asyncio.Lock()
         self._result_task: asyncio.Task | None = None
+        self._stop: bool = False
 
         # template resolver uses an async result provider
         self.template_resolver = TemplateResolver(result_provider=self._async_read_node_result_value)
@@ -181,7 +182,10 @@ class DagOrchestrator:
     # Result listener loop
     # ---------------------------------------------------------
     async def _result_loop(self) -> None:
-        async for result in t.cast(t.AsyncIterator[ResultMessage], self.transport.subscribe_results()):
+        async for result in t.cast(t.AsyncIterator[ResultMessage], self.transport.subscribe_results(wf_id=self.dag.workflow_id)):
+            if self._stop:
+                break
+
             await self._handle_result(result)
 
     async def _check_complete(self):
@@ -190,12 +194,15 @@ class DagOrchestrator:
             if self.on_complete:
                 await self.on_complete(self.dag.workflow_id)
 
+            await self.stop()
+
     # ---------------------------------------------------------
     # Core: Handling ResultMessage sent by workers
     # ---------------------------------------------------------
     async def _handle_result(self, res: ResultMessage) -> None:
         if res.workflow_id != self.dag.workflow_id:
             # Ignore results belonging to a different workflow
+            logger.debug(f"Received result for workflow {self.dag.workflow_id}, but looking for {self.dag.workflow_id}, discarding it")
             return
 
         async with self._lock:
@@ -381,11 +388,18 @@ class DagOrchestrator:
         Stop the DagOrchestrator's background result loop.
         For RedisTransport, this is triggered by closing result stream.
         """
+        self._stop = True
         if hasattr(self.transport, "close_results"):
             await self.transport.close_results()
 
         if self._result_task:
-            await self._result_task
+            self._result_task.cancel()
+
+        if hasattr(self.transport, "_destroy_consumer_group"):
+            await self.transport._destroy_consumer_group(
+                stream=self.results_stream,
+                group=self.transport.result_group+self.dag.workflow_id
+            )
 
         await self.timeout_monitor.stop()
 
