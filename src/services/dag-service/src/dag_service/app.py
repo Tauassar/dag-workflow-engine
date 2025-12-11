@@ -3,15 +3,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from .config import settings
-from .ioc import container
+from .ioc import get_container
 from .routes.v1 import v1_router
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    await container.init_orchestrator()
+    await get_container().init_orchestrator()
     yield
-    await container.shutdown()
+    await get_container().shutdown()
 
 
 app = FastAPI(

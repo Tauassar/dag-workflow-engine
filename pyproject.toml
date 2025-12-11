@@ -4,8 +4,11 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi==0.115.5",
+    "httpx==0.28.1",
     "pydantic>=2.12.0b1",
-    "redis>=4.6.0"
+    "redis>=4.6.0",
+    "starlette==0.41.2",
 ]
 
 [dependency-groups]

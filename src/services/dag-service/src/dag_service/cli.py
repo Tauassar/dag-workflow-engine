@@ -4,13 +4,14 @@ import asyncio
 import logging
 
 import click
-from dag_service.ioc import container
+from dag_service.ioc import get_container
 
 from .config import settings
 from .server import start
 
 
 async def start_worker():
+    container = get_container()
     await container.init_worker()
     await container.worker.run()
 

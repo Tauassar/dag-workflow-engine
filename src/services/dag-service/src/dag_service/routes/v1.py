@@ -27,7 +27,6 @@ def get_manager(container: AppContainer = Depends(get_container)) -> WorkflowMan
 async def register_workflow(
     definition: WorkflowDefinition,
     definition_store: WorkflowDefinitionStore = Depends(get_definition_store),
-    manager: WorkflowManager = Depends(get_manager),
 ):
     execution_id = str(uuid.uuid4())
     try:
@@ -52,9 +51,7 @@ async def trigger_workflow(
 
     # Create instance_id separate from workflow definition ID
     instance_id = str(uuid.uuid4())
-    info = await manager.start_workflow(instance_id, WorkflowDefinition.model_validate(definition, by_alias=True))
-    await info.service.start()
-
+    await manager.start_workflow(instance_id, WorkflowDefinition.model_validate(definition, by_alias=True))
     return {
         "instance_id": instance_id,
     }
