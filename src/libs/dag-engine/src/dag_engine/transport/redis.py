@@ -14,13 +14,14 @@ class RedisTransport(Transport):
     """
     Redis Streams transport.
 
-    All routing is done by DagOrchestrator + Worker.
+    Streams:
+      - tasks_stream
+      - results_stream
 
-    Streams are generic:
-        - tasks_stream
-        - results_stream
+    Each workflow may have its own consumer group for results:
+      groupname = result_group + wf_id
 
-    Multiple workflows can share these streams safely.
+    NOTE: subscribe_results must ACK using the same group name that it created.
     """
 
     def __init__(
@@ -42,17 +43,10 @@ class RedisTransport(Transport):
         self.block_ms = block_ms
 
     async def init(self):
-        await self._ensure_stream_exists(self.tasks_stream)
-        await self._ensure_stream_exists(self.results_stream)
+        # ensure streams and base groups exist
+        # prefer xgroup_create with mkstream=True to ensure stream exists in both redis and fakeredis
         await self._ensure_consumer_group(self.tasks_stream, self.task_group)
         await self._ensure_consumer_group(self.results_stream, self.result_group)
-
-    async def _ensure_stream_exists(self, stream: str):
-        """Ensure Redis stream exists by adding a dummy entry."""
-        try:
-            await self.redis.xadd(stream, {"_": "init"}, id="*")
-        except Exception:
-            pass
 
     async def _ensure_consumer_group(self, stream: str, group: str):
         try:
@@ -65,7 +59,6 @@ class RedisTransport(Transport):
         try:
             await self.redis.xgroup_destroy(name=stream, groupname=group)
         except Exception:
-            # group already exists
             pass
 
     async def publish_task(self, task: TaskMessage) -> None:
@@ -75,6 +68,27 @@ class RedisTransport(Transport):
     async def publish_result(self, result: ResultMessage) -> None:
         logger.debug("Publishing result: %s", {"json": result.model_dump_json()})
         await self.redis.xadd(self.results_stream, {"json": result.model_dump_json()}, id="*")
+
+    @staticmethod
+    def _get_json_field(fields: dict) -> str | None:
+        """
+        Redis stream entry fields can be bytes-keys or str-keys depending on client.
+        Look for 'json' key robustly.
+        """
+        if b"json" in fields:
+            return fields[b"json"]
+        if "json" in fields:
+            return fields["json"]
+        # fallback: attempt to find a key whose decoded name is 'json'
+        for k, v in fields.items():
+            try:
+                if isinstance(k, bytes) and k.decode() == "json":
+                    return v
+            except Exception:
+                pass
+            if str(k) == "json":
+                return v
+        return None
 
     async def subscribe_tasks(self) -> t.AsyncIterator[TaskMessage]:  # type: ignore[override]
         while True:
@@ -91,23 +105,41 @@ class RedisTransport(Transport):
             for _, messages in resp:
                 for msg_id, fields in messages:
                     try:
-                        raw = fields.get(b"json") or fields.get("json")
+                        raw = self._get_json_field(fields)
+                        if raw is None:
+                            raise ValueError("missing json field")
+                        # raw may be bytes or str
+                        if isinstance(raw, bytes):
+                            raw = raw.decode("utf-8")
                         data = json.loads(raw)
                         task = TaskMessage.model_validate(data)
                         yield task
                     except Exception as e:
                         logger.warning(f"task decode failure: {e}")
                     finally:
-                        await self.redis.xack(self.tasks_stream, self.task_group, msg_id)
-                        await self.redis.xdel(self.tasks_stream, msg_id)
+                        # ACK and delete using the static task_group
+                        try:
+                            await self.redis.xack(self.tasks_stream, self.task_group, msg_id)
+                            await self.redis.xdel(self.tasks_stream, msg_id)
+                        except Exception:
+                            # best-effort: ignore ack/delete errors
+                            logger.debug("failed to xack/xdel task %s", msg_id)
 
     async def subscribe_results(self, wf_id: str = "") -> t.AsyncIterator[ResultMessage]:  # type: ignore[override]
+        """
+        Each caller may create/read from a per-workflow consumer group.
+
+        groupname = result_group + wf_id
+        """
         groupname = self.result_group + wf_id
         await self._ensure_consumer_group(self.results_stream, groupname)
+
+        consumer_name = f"{self.consumer_name}-r-{wf_id}" if wf_id else f"{self.consumer_name}-r"
+
         while True:
             resp = await self.redis.xreadgroup(
                 groupname=groupname,
-                consumername=self.consumer_name + "-r",
+                consumername=consumer_name,
                 streams={self.results_stream: ">"},
                 count=1,
                 block=self.block_ms,
@@ -118,12 +150,19 @@ class RedisTransport(Transport):
             for _, messages in resp:
                 for msg_id, fields in messages:
                     try:
-                        raw = fields.get(b"json") or fields.get("json")
+                        raw = self._get_json_field(fields)
+                        if raw is None:
+                            raise ValueError("missing json field")
+                        if isinstance(raw, bytes):
+                            raw = raw.decode("utf-8")
                         data = json.loads(raw)
                         result = ResultMessage.model_validate(data)
                         yield result
                     except Exception as e:
                         logger.warning(f"result decode failure: {e}")
                     finally:
-                        await self.redis.xack(self.results_stream, self.result_group, msg_id)
-                        await self.redis.xdel(self.results_stream, msg_id)
+                        try:
+                            await self.redis.xack(self.results_stream, groupname, msg_id)
+                            await self.redis.xdel(self.results_stream, msg_id)
+                        except Exception:
+                            logger.debug("failed to xack/xdel result %s", msg_id)
