@@ -53,7 +53,7 @@ USER_JSON = """{
       },
       {
         "id": "get_comments",
-        "handler": "call_external_service1",
+        "handler": "call_external_service",
         "dependencies": ["input"],
         "timeout_seconds": 1,
         "config": {
