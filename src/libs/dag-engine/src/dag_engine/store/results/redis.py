@@ -35,15 +35,9 @@ class RedisResultStore(ResultStore):
         self.namespace = namespace.rstrip(":")
         self.serializer = serializer or JSONResultSerializer()
 
-    # --------------------------------------------------------
-    # Key format helper
-    # --------------------------------------------------------
     def get_key(self, workflow_id: str, node_id: str) -> str:
         return f"{self.namespace}:{workflow_id}:{node_id}"
 
-    # --------------------------------------------------------
-    # Save result for a node
-    # --------------------------------------------------------
     async def save_result(
         self,
         workflow_id: str,
@@ -73,9 +67,6 @@ class RedisResultStore(ResultStore):
         else:
             await self.redis.set(key, data, ex=int(ttl_seconds), nx=True)
 
-    # --------------------------------------------------------
-    # Fetch result for a single node
-    # --------------------------------------------------------
     async def get_result(self, workflow_id: str, node_id: str) -> dict[str, Any] | None:
         key = self.get_key(workflow_id, node_id)
         raw = await self.redis.get(key)
@@ -98,9 +89,6 @@ class RedisResultStore(ResultStore):
             "result": value,
         }
 
-    # --------------------------------------------------------
-    # List all results for workflow
-    # --------------------------------------------------------
     async def list_results(self, workflow_id: str) -> dict[str, dict[str, Any]]:
         pattern = f"{self.namespace}:{workflow_id}:*"
         cursor = 0
@@ -135,9 +123,6 @@ class RedisResultStore(ResultStore):
 
         return results
 
-    # --------------------------------------------------------
-    # Delete all results for workflow
-    # --------------------------------------------------------
     async def delete_results(self, workflow_id: str) -> None:
         pattern = f"{self.namespace}:{workflow_id}:*"
         cursor = 0

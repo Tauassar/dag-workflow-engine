@@ -12,7 +12,6 @@ class RedisIdempotencyStore(IdempotencyStore):
         # user passes "exec:wf:nid:attempt" or "dispatch:wf:nid:attempt"
         return f"{self.namespace}:{key}"
 
-    # --------------------------------------------------------------
     async def set_if_absent(self, key: str, ttl_seconds: int | None = None) -> bool:
         """
         Returns True if the key was created.

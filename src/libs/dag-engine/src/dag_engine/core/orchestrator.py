@@ -161,9 +161,6 @@ class DagOrchestrator:
 
         await self._publish_task(node)
 
-    # ---------------------------------------------------------
-    # Start execution (seed root nodes + start result listener)
-    # ---------------------------------------------------------
     async def start(self) -> None:
         """
         Seeds all root nodes (no dependencies) by publishing TaskMessage.
@@ -178,9 +175,6 @@ class DagOrchestrator:
         self._result_task = asyncio.create_task(self._result_loop())
         await self.timeout_monitor.start()
 
-    # ---------------------------------------------------------
-    # Result listener loop
-    # ---------------------------------------------------------
     async def _result_loop(self) -> None:
         async for result in t.cast(
             t.AsyncIterator[ResultMessage], self.transport.subscribe_results(wf_id=self.dag.workflow_id)
@@ -198,9 +192,6 @@ class DagOrchestrator:
 
             await self.stop()
 
-    # ---------------------------------------------------------
-    # Core: Handling ResultMessage sent by workers
-    # ---------------------------------------------------------
     async def _handle_result(self, res: ResultMessage) -> None:
         if res.workflow_id != self.dag.workflow_id:
             # Ignore results belonging to a different workflow
@@ -232,9 +223,6 @@ class DagOrchestrator:
 
             await self._check_complete()
 
-    # ---------------------------------------------------------
-    # SUCCESS HANDLING
-    # ---------------------------------------------------------
     async def _handle_success(self, node_id: str, res: ResultMessage) -> None:
         node = self.dag.nodes[node_id]
 
@@ -286,9 +274,6 @@ class DagOrchestrator:
             ):
                 await self._publish_task(dep)
 
-    # ---------------------------------------------------------
-    # FAILURE HANDLING
-    # ---------------------------------------------------------
     async def _handle_failure(self, node_id: str, res: ResultMessage) -> None:
         node = self.dag.nodes[node_id]
 
@@ -343,9 +328,6 @@ class DagOrchestrator:
         )
         await self._check_complete()
 
-    # ---------------------------------------------------------
-    # Retry logic (delayed republish)
-    # ---------------------------------------------------------
     async def _retry_later(self, node_id: str, delay: float) -> None:
         await asyncio.sleep(delay)
 
@@ -358,9 +340,6 @@ class DagOrchestrator:
             ):
                 await self._publish_task(node)
 
-    # ---------------------------------------------------------
-    # Wait for DAG to finish
-    # ---------------------------------------------------------
     async def wait_until_finished(self, poll_interval: float = 0.05) -> None:
         """
         Returns when all nodes are:
@@ -386,9 +365,6 @@ class DagOrchestrator:
 
             await asyncio.sleep(poll_interval)
 
-    # ---------------------------------------------------------
-    # Gracefully stop result subscription
-    # ---------------------------------------------------------
     async def stop(self) -> None:
         """
         Stop the DagOrchestrator's background result loop.
@@ -408,9 +384,6 @@ class DagOrchestrator:
 
         await self.timeout_monitor.stop()
 
-    # ---------------------------------------------------------
-    # Collect summary of results for API/UI consumption
-    # ---------------------------------------------------------
     def collect_results(self) -> dict[str, t.Any]:
         results = {}
 

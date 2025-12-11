@@ -71,7 +71,6 @@ class WorkflowManager:
         self.workflows: dict[str, WorkflowInfo] = {}
         self._lock = asyncio.Lock()
 
-    # ----------------------------------------------------------
     async def _on_workflow_complete(self, workflow_id: str):
         """
         Called by DagOrchestrator when DAG reaches terminal state.

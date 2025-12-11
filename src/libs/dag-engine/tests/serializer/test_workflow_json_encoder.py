@@ -8,10 +8,6 @@ import pydantic as pd
 from dag_engine.serializer.json import WorkflowJSONEncoder
 
 
-# ---------------------------------------------------------------------------
-# Helpers for custom object JSON
-# ---------------------------------------------------------------------------
-
 class CustomJSON:
     def __json__(self):
         return {"hello": "world"}
@@ -21,10 +17,6 @@ class SimpleModel(pd.BaseModel):
     x: int
     y: str
 
-
-# ---------------------------------------------------------------------------
-# TESTS
-# ---------------------------------------------------------------------------
 
 def test_decimal_serialized_to_float():
     obj = {"value": decimal.Decimal("12.34")}

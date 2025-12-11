@@ -41,9 +41,6 @@ class RedisTransport(Transport):
         self.consumer_name = consumer_name
         self.block_ms = block_ms
 
-    # -------------------------------------------------------
-    # Initialization (idempotent)
-    # -------------------------------------------------------
     async def init(self):
         await self._ensure_stream_exists(self.tasks_stream)
         await self._ensure_stream_exists(self.results_stream)
@@ -71,9 +68,6 @@ class RedisTransport(Transport):
             # group already exists
             pass
 
-    # -------------------------------------------------------
-    # Publish
-    # -------------------------------------------------------
     async def publish_task(self, task: TaskMessage) -> None:
         logger.debug("Publishing task: %s", {"json": task.model_dump_json()})
         await self.redis.xadd(self.tasks_stream, {"json": task.model_dump_json()}, id="*")
@@ -82,9 +76,6 @@ class RedisTransport(Transport):
         logger.debug("Publishing result: %s", {"json": result.model_dump_json()})
         await self.redis.xadd(self.results_stream, {"json": result.model_dump_json()}, id="*")
 
-    # -------------------------------------------------------
-    # Subscribe to tasks (workers)
-    # -------------------------------------------------------
     async def subscribe_tasks(self) -> t.AsyncIterator[TaskMessage]:  # type: ignore[override]
         while True:
             resp = await self.redis.xreadgroup(
@@ -110,9 +101,6 @@ class RedisTransport(Transport):
                         await self.redis.xack(self.tasks_stream, self.task_group, msg_id)
                         await self.redis.xdel(self.tasks_stream, msg_id)
 
-    # -------------------------------------------------------
-    # Subscribe to results (DagOrchestrator)
-    # -------------------------------------------------------
     async def subscribe_results(self, wf_id: str = "") -> t.AsyncIterator[ResultMessage]:  # type: ignore[override]
         groupname = self.result_group + wf_id
         await self._ensure_consumer_group(self.results_stream, groupname)

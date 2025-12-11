@@ -51,7 +51,6 @@ class TimeoutMonitor:
         self._stopped = False
         self._lock = asyncio.Lock()
 
-    # ---------------------------------------
     async def start(self):
         self._task = asyncio.create_task(self._run())
 
@@ -64,14 +63,12 @@ class TimeoutMonitor:
             except asyncio.CancelledError:
                 pass
 
-    # ---------------------------------------
     async def _emit_event(self, *args, **kwargs: t.Any):
         if not self.event_handler:
             return
 
         await self.event_handler(WorkflowEvent(*args, **kwargs))
 
-    # ---------------------------------------
     async def _run(self):
         try:
             while not self._stopped:
@@ -82,7 +79,6 @@ class TimeoutMonitor:
         except Exception as exc:
             logger.warning(f"TimeoutMonitor error: {exc}")
 
-    # ---------------------------------------
     async def _check_timeouts(self):
         now = time.time()
         overdue = []
