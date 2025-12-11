@@ -1,7 +1,7 @@
 import logging
 import uuid
 
-from dag_engine.core import WorkflowDefinition as WorkflowDefinitionSchema
+from dag_engine.core import WorkflowDefinition as WorkflowDefinitionSchema, WorkflowDAG, DagValidationError
 from dag_engine.core import WorkflowManager
 from dag_service.ioc import AppContainer, get_container
 from dag_service.store import WorkflowDefinitionStore
@@ -24,9 +24,14 @@ def get_manager(container: AppContainer = Depends(get_container)) -> WorkflowMan
 
 @v1_router.post("/workflow")
 async def register_workflow(
-    definition: WorkflowDefinition, definition_store: WorkflowDefinitionStore = Depends(get_definition_store)
+    definition: WorkflowDefinition, definition_store: WorkflowDefinitionStore = Depends(get_definition_store), manager: WorkflowManager = Depends(get_manager)
 ):
     execution_id = str(uuid.uuid4())
+    try:
+        WorkflowDAG.from_definition(workflow_id=str(uuid.uuid4()), definition=definition)
+    except DagValidationError as e:
+        raise HTTPException(400, f"Workflow didn't pass validation: {str(e).lower()}") from e
+
     await definition_store.save_definition(execution_id, definition)
 
     return {

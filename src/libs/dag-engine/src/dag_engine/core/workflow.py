@@ -50,7 +50,7 @@ class WorkflowDAG:
                 for d in n.depends_on:
                     self._nodes[d].dependents.add(n.id)
             except KeyError as exc:
-                raise DagValidationError(f"Undefined node with id '{n.id}'") from exc
+                raise DagValidationError(f"Undefined dependency for node with id '{n.id}'") from exc
 
         # check cycles (Kahn)
         self._validate_acyclic()
@@ -75,7 +75,7 @@ class WorkflowDAG:
                 if indeg[c] == 0:
                     q.append(c)
         if seen != len(self._nodes):
-            raise ValueError("Workflow contains cycle(s)")
+            raise DagValidationError("Workflow contains cycle(s)")
 
     @classmethod
     def from_definition(cls, definition: WorkflowDefinition, **kwargs: t.Any) -> t.Self:
