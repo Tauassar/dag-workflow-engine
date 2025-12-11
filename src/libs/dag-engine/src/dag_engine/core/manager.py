@@ -10,7 +10,7 @@ from .orchestrator import DagOrchestrator
 from dag_engine.transport import Transport
 from dag_engine.result_store import ResultStore
 from dag_engine.idempotency_store import IdempotencyStore
-from ..event_store import EventStore
+from dag_engine.event_store import EventStore
 
 
 class WorkflowInfo:
