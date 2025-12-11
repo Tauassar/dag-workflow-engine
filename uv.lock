@@ -88,23 +88,15 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
-test = [
-    { name = "pytest" },
+dev = [
     { name = "pytest-asyncio" },
-]
-types = [
-    { name = "mypy" },
 ]
 
 [package.metadata]
 requires-dist = [{ name = "pydantic", specifier = ">=2.11.3" }]
 
 [package.metadata.requires-dev]
-test = [
-    { name = "pytest", specifier = "~=8.4.2" },
-    { name = "pytest-asyncio", specifier = "~=0.21.0" },
-]
-types = [{ name = "mypy", specifier = ">=1.15.0" }]
+dev = [{ name = "pytest-asyncio", specifier = ">=0.23.8" }]
 
 [[package]]
 name = "dag-service"
@@ -140,11 +132,27 @@ dependencies = [
     { name = "redis" },
 ]
 
+[package.dev-dependencies]
+test = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+types = [
+    { name = "mypy" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "pydantic", specifier = ">=2.12.0b1" },
     { name = "redis", specifier = ">=4.6.0" },
 ]
+
+[package.metadata.requires-dev]
+test = [
+    { name = "pytest", specifier = "~=8.4.2" },
+    { name = "pytest-asyncio", specifier = "~=0.23.0" },
+]
+types = [{ name = "mypy", specifier = ">=1.15.0" }]
 
 [[package]]
 name = "dependency-injector"
@@ -426,14 +434,14 @@ wheels = [
 
 [[package]]
 name = "pytest-asyncio"
-version = "0.21.2"
+version = "0.23.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pytest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ae/53/57663d99acaac2fcdafdc697e52a9b1b7d6fcf36616281ff9768a44e7ff3/pytest_asyncio-0.21.2.tar.gz", hash = "sha256:d67738fc232b94b326b9d060750beb16e0074210b98dd8b58a5239fa2a154f45", size = 30656 }
+sdist = { url = "https://files.pythonhosted.org/packages/de/b4/0b378b7bf26a8ae161c3890c0b48a91a04106c5713ce81b4b080ea2f4f18/pytest_asyncio-0.23.8.tar.gz", hash = "sha256:759b10b33a6dc61cce40a8bd5205e302978bbbcc00e279a8b61d9a6a3c82e4d3", size = 46920 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9c/ce/1e4b53c213dce25d6e8b163697fbce2d43799d76fa08eea6ad270451c370/pytest_asyncio-0.21.2-py3-none-any.whl", hash = "sha256:ab664c88bb7998f711d8039cacd4884da6430886ae8bbd4eded552ed2004f16b", size = 13368 },
+    { url = "https://files.pythonhosted.org/packages/ee/82/62e2d63639ecb0fbe8a7ee59ef0bc69a4669ec50f6d3459f74ad4e4189a2/pytest_asyncio-0.23.8-py3-none-any.whl", hash = "sha256:50265d892689a5faefb84df80819d1ecef566eb3549cf915dfb33569359d1ce2", size = 17663 },
 ]
 
 [[package]]
