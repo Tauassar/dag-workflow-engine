@@ -26,6 +26,15 @@ Full documentation on core library and architecture details can be found in [pyp
 Full documentation on Worker nodes and HTTP API implementation can be found in service's [README.md](src/services/dag-service/README.md)
 
 
+## How to trigger the test workflows
+
+1. Run Worker and HTTP API
+2. Upload test workflow to **`POST`** `/api/workflow` and obtain execution_id, execution_id is actual id of workflow in storage
+3. Send request to **`POST`** /api/workflow/trigger/:execution_id and obtain instance_id, instance_id is actual id of running workflow instance in storage
+4. Obtain state in **`GET`** /api/workflows/:instance_id, this is an endpoint for obtaining running workflow instance current state
+5. Obtain result in **`GET`** /api/workflows/:instance_id/results, this is an endpoint for obtaining results for finished workflow instances
+
+
 ## Settings
 
 Following settings can be set using env variables
