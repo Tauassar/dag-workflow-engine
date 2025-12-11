@@ -35,6 +35,23 @@ class FakeIdempotencyStore:
         self._seen.add(key)
         return True
 
+class FakeExecutionStore:
+    def __init__(self):
+        self.meta = {}
+        self.results = {}
+
+    async def save_metadata(self, workflow_id: str, meta: dict):
+        self.meta[workflow_id] = meta
+
+    async def load_metadata(self, workflow_id: str):
+        return self.meta.get(workflow_id)
+
+    async def save_results(self, workflow_id: str, results: dict):
+        self.results[workflow_id] = results
+
+    async def load_results(self, workflow_id: str):
+        return self.results.get(workflow_id)
+
 
 @pytest.fixture
 async def redis():
@@ -71,3 +88,8 @@ async def idemp(redis):
 @pytest.fixture
 async def rstore(redis):
     return FakeResultStore()
+
+
+@pytest.fixture
+async def exec_store(redis):
+    return FakeExecutionStore()

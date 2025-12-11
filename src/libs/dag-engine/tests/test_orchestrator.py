@@ -13,32 +13,6 @@ from dag_engine.core.orchestrator import DagOrchestrator
 from dag_engine.event_sourcing import WorkflowEventType
 
 
-class FakeIdempotencyStore:
-    def __init__(self):
-        self._set = set()
-
-    async def set_if_absent(self, key: str, ttl_seconds: int | None = None) -> bool:
-        if key in self._set:
-            return False
-        self._set.add(key)
-        return True
-
-
-class FakeResultStore:
-    def __init__(self):
-        self._data: dict[str, dict] = {}
-
-    async def save_result(self, workflow_id: str, node_id: str, attempt: int, result: t.Any, ttl_seconds=None):
-        key = f"{workflow_id}:{node_id}"
-        self._data[key] = {"result": result, "attempt": attempt}
-
-    async def get_result(self, workflow_id: str, node_id: str):
-        return self._data.get(f"{workflow_id}:{node_id}")
-
-    def get_key(self, workflow_id: str, node_id: str) -> str:
-        return f"rs:{workflow_id}:{node_id}"
-
-
 class FakeEventStore:
     def __init__(self):
         self.append = AsyncMock()

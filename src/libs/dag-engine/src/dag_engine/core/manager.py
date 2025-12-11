@@ -100,6 +100,7 @@ class WorkflowManager:
                 },
             )
             await self.execution_store.save_results(workflow_id, summary)
+            self.workflows.pop(workflow_id, None)
 
     async def start_workflow(self, workflow_id: str, definition: WorkflowDefinition) -> WorkflowInfo:
         """
@@ -128,7 +129,6 @@ class WorkflowManager:
 
             self.workflows[workflow_id] = info
 
-        await service.start()
         await self.execution_store.save_metadata(
             workflow_id,
             {
@@ -139,6 +139,13 @@ class WorkflowManager:
                 "error": info.error,
             },
         )
+
+        try:
+            await service.start()
+        except Exception:
+            await self._on_workflow_complete(workflow_id)
+            raise
+
         return info
 
     async def _load_persisted_status(self, workflow_id: str):
