@@ -37,6 +37,10 @@ class WorkflowJSONEncoder(json.JSONEncoder):
             # ISO 8601 is machine-readable and portable
             return obj.model_dump(mode="json")
 
+        if isinstance(obj, set):
+            # ISO 8601 is machine-readable and portable
+            return str(obj)
+
         # Support custom objects providing __json__()
         if hasattr(obj, "__json__") and callable(obj.__json__):
             return obj.__json__()
