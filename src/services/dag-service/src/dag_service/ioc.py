@@ -1,19 +1,18 @@
 import logging
 import uuid
-from redis.asyncio import Redis
 
 from dag_engine.core import WorkflowWorker
 from dag_engine.core.handlers import hregistry
 from dag_engine.core.manager import WorkflowManager
-
 from dag_engine.store.events import RedisEventStore
 from dag_engine.store.execution import RedisExecutionStore
 from dag_engine.store.idempotency import RedisIdempotencyStore
 from dag_engine.store.results import RedisResultStore
-
 from dag_engine.transport import RedisTransport
-from .store import WorkflowDefinitionStore
+from redis.asyncio import Redis
+
 from .config import Settings
+from .store import WorkflowDefinitionStore
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +95,7 @@ class AppContainer:
 
     async def shutdown(self):
         try:
-            await self.redis.close()     # works on fakeredis + redis-py
+            await self.redis.close()  # works on fakeredis + redis-py
         except Exception:
             pass
         logger.info("Redis client closed")
@@ -104,7 +103,9 @@ class AppContainer:
 
 def scoper_container():
     from .config import settings
+
     container = AppContainer(settings)
+
     def _get_container() -> AppContainer:
         """
         In production this returns the real container,
@@ -113,5 +114,6 @@ def scoper_container():
         return container
 
     return _get_container
+
 
 get_container = scoper_container()

@@ -1,4 +1,5 @@
 import logging
+import typing as t
 import uuid
 
 from dag_engine.core import DagValidationError, WorkflowDAG
@@ -20,7 +21,7 @@ def get_definition_store(container: AppContainer = Depends(get_container)) -> Wo
 
 
 def get_manager(container: AppContainer = Depends(get_container)) -> WorkflowManager:
-    return container.manager
+    return t.cast(WorkflowManager, container.manager)
 
 
 @v1_router.post("/workflow")
