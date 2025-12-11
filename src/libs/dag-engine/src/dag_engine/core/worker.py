@@ -1,12 +1,9 @@
 import traceback
-import typing as t
 
+from .handlers import Handler
 from dag_engine.idempotency_store import IdempotencyStore
 from dag_engine.result_store import ResultStore
 from dag_engine.transport import ResultType, ResultMessage, Transport, TaskMessage
-
-
-Handler = t.Callable[[TaskMessage], t.Awaitable[t.Any]]
 
 
 class WorkflowWorker:

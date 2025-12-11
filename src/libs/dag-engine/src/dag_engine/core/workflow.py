@@ -4,7 +4,6 @@ import logging
 import time
 import typing as t
 import asyncio
-import uuid
 from collections import deque
 
 from . import NodeStatus
@@ -14,24 +13,23 @@ from .schemas import (
 )
 from .entities import DagNode
 from dag_engine.event_store import EventStore
-from dag_engine.transport import TaskMessage
-from ..event_sourcing import WorkflowEvent, WorkflowEventType
+from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
 
 
 logger = logging.getLogger(__name__)
-Handler = t.Callable[[TaskMessage], t.Awaitable[t.Any]]
 
 
 class WorkflowDAG:
     def __init__(
         self,
+        workflow_id: str,
         definition: WorkflowDefinition,
         event_store: EventStore | None = None,
     ) -> None:
         self.event_store = event_store
 
         self.workflow_name = definition.name
-        self.workflow_id = str(uuid.uuid4())
+        self.workflow_id = workflow_id
         self._nodes = {}
 
         # try to construct DAG workflow
@@ -56,8 +54,6 @@ class WorkflowDAG:
         # check cycles (Kahn)
         self._validate_acyclic()
 
-        self._handlers_by_type = {}
-
         self._task_queue: asyncio.Queue = asyncio.Queue()
         self._inflight = set()
         self._lock = asyncio.Lock()
@@ -69,10 +65,6 @@ class WorkflowDAG:
     @property
     def nodes(self) -> dict[str, DagNode]:
         return self._nodes
-
-    @property
-    def handlers(self):
-        return self._handlers_by_type
 
     def _validate_acyclic(self):
         indeg = {nid: len(n.depends_on) for nid, n in self._nodes.items()}
@@ -89,20 +81,19 @@ class WorkflowDAG:
             raise ValueError("Workflow contains cycle(s)")
 
     @classmethod
-    def from_dict(cls, input_dict: dict, *args: t.Any, **kwargs: t.Any) -> t.Self:
-        definition = WorkflowDefinition.model_validate(input_dict, by_alias=True)
+    def from_definition(cls, definition: WorkflowDefinition, *args: t.Any, **kwargs: t.Any) -> t.Self:
         return cls(definition=definition, *args, **kwargs)
 
-    def _register_handler(self, node_type: str, handler: Handler) -> None:
-        if not asyncio.iscoroutinefunction(handler):
-            raise ValueError("handler must be async")
-        self._handlers_by_type[node_type] = handler
-
-    def handler(self, node_type: str):
-        def decorator(func: Handler):
-            self._register_handler(node_type, func)
-            return func
-        return decorator
+    @classmethod
+    def from_dict(cls, input_dict: dict, *args: t.Any, **kwargs: t.Any) -> t.Self:
+        return cls.from_definition(
+            definition=WorkflowDefinition.model_validate(
+                input_dict,
+                by_alias=True,
+            ),
+            *args,
+            **kwargs,
+        )
 
     async def block_dependents(self, node_id: str):
         """

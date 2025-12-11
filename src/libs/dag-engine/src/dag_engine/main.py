@@ -2,9 +2,9 @@ from __future__ import annotations
 import json
 
 import asyncio, time
-import logging
 
 from dag_engine.core import DagOrchestrator,  WorkflowWorker
+from dag_engine.core.handlers import hregistry
 from dag_engine.event_store import RedisEventStore
 from dag_engine.idempotency_store import RedisIdempotencyStore
 from dag_engine.result_store import RedisResultStore
@@ -19,11 +19,11 @@ LOG_FORMAT = (
     "%(filename)s:%(lineno)d (%(funcName)s) — %(message)s"
 )
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format=LOG_FORMAT,
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+# logging.basicConfig(
+#     level=logging.DEBUG,
+#     format=LOG_FORMAT,
+#     datefmt="%Y-%m-%d %H:%M:%S",
+# )
 
 USER_JSON = """{
   "name": "Parallel API Fetcher",
@@ -75,14 +75,14 @@ USER_JSON = """{
 
 dag = WorkflowDAG.from_dict(json.loads(USER_JSON))
 
-@dag.handler("input")
+@hregistry.handler("input")
 async def input_handler(task: TaskMessage):
     # produce initial payload
     await asyncio.sleep(0.01)
     return {"input_payload": {"user_id": "u-123"}}
 
 
-@dag.handler("call_external_service")
+@hregistry.handler("call_external_service")
 async def call_external_service(task: TaskMessage):
     # Simulate HTTP call
     await asyncio.sleep(0.05)
@@ -90,16 +90,7 @@ async def call_external_service(task: TaskMessage):
     return {"node": task.node_id, "url": task.config.get("url"), "fetched_at": time.time(), "user_id": task.config.get("user_id")}
 
 
-@dag.handler("call_external_service1")
-async def call_external_service(task: TaskMessage):
-    print(f"Received task {task.model_dump()}")
-    # Simulate HTTP call
-    await asyncio.sleep(0.01)
-    # return data including config echo
-    return {"node": task.node_id, "url": task.config.get("url"), "fetched_at": time.time(), "user_id": task.config.get("user_id")}
-
-
-@dag.handler("output")
+@hregistry.handler("output")
 async def output_handler(task: TaskMessage):
     await asyncio.sleep(0.01)
     return {"node": task.node_id, "aggregated": True, "note": "aggregation done by DagOrchestrator", "ctx": task}
@@ -145,8 +136,8 @@ async def main():
     await dag_service.start()
 
     # start external workers (they read tasks via transport)
-    worker1 = WorkflowWorker(worker_transport, dag.handlers, idemp_store, result_store=result_store, worker_id="w1")
-    worker2 = WorkflowWorker(worker2_transport, dag.handlers, idemp_store, result_store=result_store, worker_id="w2")
+    worker1 = WorkflowWorker(worker_transport, hregistry.handlers, idemp_store, result_store=result_store, worker_id="w1")
+    worker2 = WorkflowWorker(worker2_transport, hregistry.handlers, idemp_store, result_store=result_store, worker_id="w2")
 
     # run workers in background
     wtask1 = asyncio.create_task(worker1.run())

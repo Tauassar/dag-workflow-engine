@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "fastapi>=0.111.1",
     "pydantic-settings>=2.9.1",
     "pydantic>=2.11.3",
     "uvicorn[standard]>=0.22.0",
@@ -18,7 +19,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-dag-service = "dag_service.main:main"
+dag-service = "dag_service.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dag_service"]

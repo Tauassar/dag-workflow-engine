@@ -1,5 +1,11 @@
 version: "3.8"
 
+x-service-base: &base
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+
+
 services:
   redis:
     image: redis:7
@@ -8,38 +14,24 @@ services:
     volumes:
       - redis_data:/data
 
-#  api:
-#    build:
-#      context: ./api
-#    container_name: wf_api
-#    depends_on:
-#      - redis
-#    ports:
-#      - "8000:8000"
-#    environment:
-#      - REDIS_URL=redis://redis:6379/0
-#
-#  orchestrator:
-#    build:
-#      context: ./orchestrator
-#    container_name: wf_orchestrator
-#    depends_on:
-#      - redis
-#    environment:
-#      - REDIS_URL=redis://redis:6379/0
-#      - CONSUMER_GROUP_WORKERS=wg-workers
-#      - CONSUMER_GROUP_RESULTS=wg-results
-#
-#  worker:
-#    build:
-#      context: ./worker
-#    container_name: wf_worker
-#    depends_on:
-#      - redis
-#    environment:
-#      - REDIS_URL=redis://redis:6379/0
-#      - CONSUMER_GROUP=wg-workers
-#      - CONSUMER_NAME=worker-1
+  api_and_orchestrator:
+    <<: *base
+    environment:
+      SERVICE_NAME: dag-service
+      SERVICE_TYPE: web
+      REDIS_HOST: redis
+    ports: [ "8000:8000" ]
+    depends_on:
+      - redis
+
+  worker:
+    <<: *base
+    environment:
+      SERVICE_NAME: dag-service
+      SERVICE_TYPE: worker
+      REDIS_HOST: redis
+    depends_on:
+      - redis
 
 volumes:
   redis_data:

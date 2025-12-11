@@ -10,6 +10,8 @@ from .orchestrator import DagOrchestrator
 from .worker import WorkflowWorker
 from .exceptions import DagEngineException, DagValidationError
 from .workflow import WorkflowDAG
+from .manager import WorkflowInfo, WorkflowManager
+from .handlers import HandlerRegistry, hregistry
 
 
 __all__ = (
@@ -24,4 +26,8 @@ __all__ = (
     "DagEngineException",
     "DagValidationError",
     "WorkflowDAG",
+    "WorkflowInfo",
+    "WorkflowManager",
+    "HandlerRegistry",
+    "hregistry",
 )
