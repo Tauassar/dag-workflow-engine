@@ -128,37 +128,6 @@ class WorkflowManager:
         return info
 
     # ------------------------------------------------------------------
-    async def cleanup_workflow(self, workflow_id: str) -> None:
-        """
-        Cleans up workflow: stop service loops, remove redis keys if desired, drop local state.
-        """
-        async with self._lock:
-            info = self.workflows.get(workflow_id)
-            if not info:
-                return
-
-        try:
-            await info.service.stop()
-        except Exception:
-            pass
-
-        # Delete results (optional)
-        try:
-            await self.result_store.delete_results(workflow_id)
-        except Exception:
-            pass
-
-        async with self._lock:
-            del self.workflows[workflow_id]
-
-    # ------------------------------------------------------------------
-    def list_workflows(self) -> dict[str, WorkflowInfo]:
-        """
-        Returns metadata for all workflows.
-        """
-        return dict(self.workflows)
-
-    # ------------------------------------------------------------------
     def get_status(self, workflow_id: str) -> dict[str, t.Any]:
         """
         Returns current known status of workflow.
