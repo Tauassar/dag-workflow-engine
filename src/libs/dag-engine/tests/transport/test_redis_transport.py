@@ -1,16 +1,9 @@
-# tests/transport/test_redis_transport.py
-import json
 import asyncio
 import pytest
-from fakeredis.aioredis import FakeRedis
 
-from dag_engine.transport.redis import RedisTransport
 from dag_engine.transport.messages import TaskMessage, ResultMessage, ResultType
 
 
-# -------------------------
-# Helpers
-# -------------------------
 def make_task(node_id="A"):
     return TaskMessage(
         workflow_id="wf1",
@@ -35,34 +28,6 @@ def make_result(node_id="A"):
     )
 
 
-# -------------------------
-# Fixtures
-# -------------------------
-@pytest.fixture
-async def redis():
-    client = FakeRedis()
-    yield client
-    await client.aclose()
-
-
-@pytest.fixture
-async def transport(redis):
-    tr = RedisTransport(
-        redis=redis,
-        tasks_stream="tasks",
-        results_stream="results",
-        task_group="task_group",
-        result_group="result_group",
-        consumer_name="consumer",
-        block_ms=50,
-    )
-    await tr.init()
-    return tr
-
-
-# -------------------------
-# Tests
-# -------------------------
 @pytest.mark.asyncio
 async def test_streams_and_groups_created(redis, transport):
     # Streams must exist (use xinfo_stream which works with fakeredis)
