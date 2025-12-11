@@ -38,7 +38,7 @@ class WorkflowInfo:
 
     @property
     def is_finished(self) -> bool:
-        return self.status in ("COMPLETED", "FAILED", "BLOCKED")
+        return self.status in ("COMPLETED", "FAILED")
 
 
 class WorkflowManager:
