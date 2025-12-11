@@ -7,6 +7,7 @@ from dag_engine.core import WorkflowWorker
 from dag_engine.core.handlers import hregistry
 from dag_engine.core.manager import WorkflowManager
 from dag_engine.event_store import RedisEventStore
+from dag_engine.execution_store import RedisExecutionStore
 from dag_engine.idempotency_store import RedisIdempotencyStore
 from dag_engine.result_store import RedisResultStore
 from dag_engine.transport import RedisTransport
@@ -29,6 +30,7 @@ class AppContainer:
         self.result_store = RedisResultStore(self.redis)
         self.idempotency_store = RedisIdempotencyStore(self.redis)
         self.event_store = RedisEventStore(self.redis)
+        self.execution_store = RedisExecutionStore(self.redis)
         self.orchestrator_transport = RedisTransport(
             self.redis,
             tasks_stream="engine:tasks",
@@ -51,6 +53,7 @@ class AppContainer:
             transport=self.orchestrator_transport,
             result_store=self.result_store,
             idempotency_store=self.idempotency_store,
+            execution_store=self.execution_store,
         )
 
     async def create_workflow_worker(self) -> WorkflowWorker:

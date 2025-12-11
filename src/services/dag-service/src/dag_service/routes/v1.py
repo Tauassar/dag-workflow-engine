@@ -60,7 +60,7 @@ async def get_workflow_status(
     manager: WorkflowManager = Depends(get_manager)
 ):
     try:
-        return manager.get_status(instance_id)
+        return await manager.get_status(instance_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Running workflow instance not found")
 
@@ -70,13 +70,15 @@ async def get_results(
     instance_id: str,
     manager: WorkflowManager = Depends(get_manager)
 ):
-    info = manager.workflows.get(instance_id)
-    if not info:
-        raise HTTPException(status_code=404, detail="Execution not found")
+    try:
+        status = await manager.get_results(instance_id)
+        if status["state"] == "RUNNING":
+            raise HTTPException(400, "Workflow not finished yet")
 
-    return {
-        "instance_id": instance_id,
-        "status": info.status,
-        "results": info.service.collect_results(),
-        "completed_at": info.completed_at
-    }
+        return {
+            "workflow_id": instance_id,
+            "status": status["state"],
+            "results": status["nodes"],
+        }
+    except ValueError:
+        raise HTTPException(404, "Workflow not found")

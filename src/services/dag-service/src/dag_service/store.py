@@ -1,5 +1,3 @@
-# workflow_definition_store.py
-
 import json
 from redis.asyncio import Redis
 

@@ -11,6 +11,7 @@ from dag_engine.transport import Transport
 from dag_engine.result_store import ResultStore
 from dag_engine.idempotency_store import IdempotencyStore
 from dag_engine.event_store import EventStore
+from dag_engine.execution_store import WorkflowExecutionStore
 
 
 class WorkflowInfo:
@@ -53,11 +54,13 @@ class WorkflowManager:
         self,
         transport: Transport,
         result_store: ResultStore,
+        execution_store: WorkflowExecutionStore,
         idempotency_store: IdempotencyStore,
         event_store: EventStore | None = None,
     ):
         self.transport = transport
         self.result_store = result_store
+        self.execution_store = execution_store
         self.idempotency_store = idempotency_store
         self.event_store = event_store
 
@@ -78,12 +81,22 @@ class WorkflowManager:
 
             if any(v["status"] == "FAILED" for v in summary.values()):
                 info.status = "FAILED"
-            elif any(v["status"] == "BLOCKED" for v in summary.values()):
-                info.status = "BLOCKED"
             else:
                 info.status = "COMPLETED"
 
             info.completed_at = time.time()
+
+            await self.execution_store.save_metadata(
+                workflow_id,
+                {
+                    "workflow_id": workflow_id,
+                    "status": info.status,
+                    "created_at": info.created_at,
+                    "completed_at": info.completed_at,
+                    "error": info.error,
+                }
+            )
+            await self.execution_store.save_results(workflow_id, summary)
 
     async def start_workflow(self, workflow_id: str, definition: WorkflowDefinition) -> WorkflowInfo:
         """
@@ -117,20 +130,51 @@ class WorkflowManager:
             self.workflows[workflow_id] = info
 
         await service.start()
+        await self.execution_store.save_metadata(
+            workflow_id,
+            {
+                "workflow_id": workflow_id,
+                "status": info.status,
+                "created_at": info.created_at,
+                "completed_at": info.completed_at,
+                "error": info.error,
+            }
+        )
         return info
 
-    def get_status(self, workflow_id: str) -> dict[str, t.Any]:
+    async def _load_persisted_status(self, workflow_id: str):
+        meta = await self.execution_store.load_metadata(workflow_id)
+        if not meta:
+            raise ValueError("Workflow not found")
+
+        return {
+            "workflow_id": workflow_id,
+            "state": meta["status"],
+            "created_at": meta["created_at"],
+            "completed_at": meta["completed_at"],
+        }
+
+    async def get_status(self, workflow_id: str) -> dict[str, t.Any]:
         """
         Returns current known status of workflow.
         """
         info = self.workflows.get(workflow_id)
         if not info:
-            raise ValueError(f"Workflow {workflow_id} not found")
+            # Workflow completed earlier or this is another node
+            return await self._load_persisted_status(workflow_id)
 
         return {
             "workflow_id": workflow_id,
             "state": info.status,
             "created_at": info.created_at,
             "completed_at": info.completed_at,
+        }
+
+    async def get_results(self, workflow_id: str) -> dict[str, t.Any]:
+        info = await self._load_persisted_status(workflow_id)
+        return {
+            "workflow_id": workflow_id,
+            "state": info["state"],
+            "nodes": await self.execution_store.load_results(workflow_id),
         }
 
