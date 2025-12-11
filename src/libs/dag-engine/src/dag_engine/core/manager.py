@@ -8,10 +8,10 @@ from .orchestrator import DagOrchestrator
 from .workflow import WorkflowDAG
 
 if t.TYPE_CHECKING:
-    from dag_engine.event_store import EventStore
-    from dag_engine.execution_store import WorkflowExecutionStore
-    from dag_engine.idempotency_store import IdempotencyStore
-    from dag_engine.result_store import ResultStore
+    from dag_engine.store.events import EventStore
+    from dag_engine.store.execution import WorkflowExecutionStore
+    from dag_engine.store.idempotency import IdempotencyStore
+    from dag_engine.store.results import ResultStore
     from dag_engine.transport import Transport
 
     from .workflow import WorkflowDefinition

@@ -5,7 +5,7 @@ import typing as t
 
 from dag_engine.core import NodeStatus
 from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
-from dag_engine.idempotency_store import IdempotencyStore
+from dag_engine.store.idempotency import IdempotencyStore
 
 logger = logging.getLogger(__name__)
 

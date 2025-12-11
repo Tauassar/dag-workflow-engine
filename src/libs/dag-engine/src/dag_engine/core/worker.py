@@ -1,8 +1,8 @@
 import traceback
 import typing as t
 
-from dag_engine.idempotency_store import IdempotencyStore
-from dag_engine.result_store import ResultStore
+from dag_engine.store.idempotency import IdempotencyStore
+from dag_engine.store.results import ResultStore
 from dag_engine.transport import ResultMessage, ResultType, TaskMessage, Transport
 
 from .handlers import Handler

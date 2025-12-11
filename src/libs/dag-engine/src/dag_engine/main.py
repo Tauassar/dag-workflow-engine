@@ -8,9 +8,9 @@ import uuid
 
 from dag_engine.core import DagOrchestrator, WorkflowWorker
 from dag_engine.core.handlers import hregistry
-from dag_engine.event_store import RedisEventStore
-from dag_engine.idempotency_store import RedisIdempotencyStore
-from dag_engine.result_store import RedisResultStore
+from dag_engine.store.events import RedisEventStore
+from dag_engine.store.idempotency import RedisIdempotencyStore
+from dag_engine.store.results import RedisResultStore
 from dag_engine.transport import InMemoryTransport, RedisTransport, TaskMessage
 from redis.asyncio import Redis
 

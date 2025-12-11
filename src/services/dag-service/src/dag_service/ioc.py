@@ -4,10 +4,10 @@ import uuid
 from dag_engine.core import WorkflowWorker
 from dag_engine.core.handlers import hregistry
 from dag_engine.core.manager import WorkflowManager
-from dag_engine.event_store import RedisEventStore
-from dag_engine.execution_store import RedisExecutionStore
-from dag_engine.idempotency_store import RedisIdempotencyStore
-from dag_engine.result_store import RedisResultStore
+from dag_engine.store.events import RedisEventStore
+from dag_engine.store.execution import RedisExecutionStore
+from dag_engine.store.idempotency import RedisIdempotencyStore
+from dag_engine.store.results import RedisResultStore
 from dag_engine.transport import RedisTransport
 from redis.asyncio import Redis
 

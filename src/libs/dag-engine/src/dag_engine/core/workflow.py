@@ -15,7 +15,7 @@ from .schemas import (
 )
 
 if t.TYPE_CHECKING:
-    from dag_engine.event_store import EventStore
+    from dag_engine.store.events import EventStore
 
 logger = logging.getLogger(__name__)
 
