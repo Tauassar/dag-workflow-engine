@@ -17,7 +17,12 @@ async def call_external_service(task: TaskMessage):
     # Simulate HTTP call
     await asyncio.sleep(0.05)
     # return data including config echo
-    return {"node": task.node_id, "url": task.config.get("url"), "fetched_at": time.time(), "user_id": task.config.get("user_id")}
+    return {
+        "node": task.node_id,
+        "url": task.config.get("url"),
+        "fetched_at": time.time(),
+        "user_id": task.config.get("user_id"),
+    }
 
 
 @hregistry.handler("output")

@@ -1,15 +1,10 @@
-from typing import Optional
 from redis.asyncio import Redis
 
 from .protocols import IdempotencyStore
 
 
 class RedisIdempotencyStore(IdempotencyStore):
-    def __init__(
-        self,
-        redis: Redis,
-        namespace: str = "wf:idemp"
-    ):
+    def __init__(self, redis: Redis, namespace: str = "wf:idemp"):
         self.redis = redis
         self.namespace = namespace.rstrip(":")
 
@@ -18,7 +13,7 @@ class RedisIdempotencyStore(IdempotencyStore):
         return f"{self.namespace}:{key}"
 
     # --------------------------------------------------------------
-    async def set_if_absent(self, key: str, ttl_seconds: Optional[int] = None) -> bool:
+    async def set_if_absent(self, key: str, ttl_seconds: int | None = None) -> bool:
         """
         Returns True if the key was created.
         Returns False if already exists.

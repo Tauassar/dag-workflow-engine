@@ -1,10 +1,10 @@
+import json
 import re
 import typing as t
-import json
 
 from dag_engine.serializer import WorkflowJSONEncoder
 
-from .exceptions import TemplateResolutionError, MissingDependencyError
+from .exceptions import MissingDependencyError, TemplateResolutionError
 
 
 class TemplateResolver:

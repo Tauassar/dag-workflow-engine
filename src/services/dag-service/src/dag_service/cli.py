@@ -1,10 +1,11 @@
 """Entrypoints for the consumers."""
+
 import asyncio
 import logging
 
 import click
-
 from dag_service.ioc import container
+
 from .config import settings
 from .server import start
 
@@ -16,10 +17,7 @@ async def start_worker():
 
 @click.group()
 def main() -> None:
-    logging.basicConfig(
-        level=settings.LOG_LEVEL,
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-    )
+    logging.basicConfig(level=settings.LOG_LEVEL, format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
 
 
 @main.command(name="worker")

@@ -4,20 +4,24 @@ import asyncio
 import time
 import typing as t
 
-from . import WorkflowDefinition
-from .workflow import WorkflowDAG
 from .orchestrator import DagOrchestrator
-from dag_engine.transport import Transport
-from dag_engine.result_store import ResultStore
-from dag_engine.idempotency_store import IdempotencyStore
-from dag_engine.event_store import EventStore
-from dag_engine.execution_store import WorkflowExecutionStore
+from .workflow import WorkflowDAG
+
+if t.TYPE_CHECKING:
+    from dag_engine.event_store import EventStore
+    from dag_engine.execution_store import WorkflowExecutionStore
+    from dag_engine.idempotency_store import IdempotencyStore
+    from dag_engine.result_store import ResultStore
+    from dag_engine.transport import Transport
+
+    from .workflow import WorkflowDefinition
 
 
 class WorkflowInfo:
     """
     Tracks the runtime state of a workflow execution.
     """
+
     def __init__(
         self,
         workflow_id: str,
@@ -94,7 +98,7 @@ class WorkflowManager:
                     "created_at": info.created_at,
                     "completed_at": info.completed_at,
                     "error": info.error,
-                }
+                },
             )
             await self.execution_store.save_results(workflow_id, summary)
 
@@ -106,11 +110,7 @@ class WorkflowManager:
             if workflow_id in self.workflows:
                 raise ValueError(f"Workflow {workflow_id} already exists")
 
-            dag = WorkflowDAG.from_definition(
-                definition,
-                workflow_id=workflow_id,
-                event_store=self.event_store
-            )
+            dag = WorkflowDAG.from_definition(definition, workflow_id=workflow_id, event_store=self.event_store)
 
             service = DagOrchestrator(
                 dag=dag,
@@ -138,7 +138,7 @@ class WorkflowManager:
                 "created_at": info.created_at,
                 "completed_at": info.completed_at,
                 "error": info.error,
-            }
+            },
         )
         return info
 
@@ -177,4 +177,3 @@ class WorkflowManager:
             "state": info["state"],
             "nodes": await self.execution_store.load_results(workflow_id),
         }
-

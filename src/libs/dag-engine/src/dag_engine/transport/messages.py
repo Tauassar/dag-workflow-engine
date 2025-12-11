@@ -1,6 +1,7 @@
 import enum
 import time
 import typing as t
+
 import pydantic as pd
 
 
@@ -16,7 +17,7 @@ class TaskMessage(pd.BaseModel):
 
 class ResultType(enum.StrEnum):
     COMPLETED = "COMPLETED"
-    FAILED  = "FAILED"
+    FAILED = "FAILED"
 
 
 class ResultMessage(pd.BaseModel):

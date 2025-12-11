@@ -17,12 +17,8 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.PROJECT_VERSION,
-    openapi_url=(
-        f"{settings.API_STR}/openapi.json" if settings.API_ENABLE_DOCS else None
-    ),
-    docs_url=(
-        f"{settings.API_STR}/docs" if settings.API_ENABLE_DOCS else None
-    ),
+    openapi_url=(f"{settings.API_STR}/openapi.json" if settings.API_ENABLE_DOCS else None),
+    docs_url=(f"{settings.API_STR}/docs" if settings.API_ENABLE_DOCS else None),
     lifespan=lifespan,
 )
 app.include_router(v1_router)

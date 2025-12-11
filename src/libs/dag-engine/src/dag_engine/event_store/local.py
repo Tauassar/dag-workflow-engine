@@ -1,4 +1,3 @@
-from typing import Dict, List
 from dag_engine.event_sourcing import WorkflowEvent
 
 from .protocols import EventStore
@@ -13,7 +12,7 @@ class InMemoryEventStore(EventStore):
     """
 
     def __init__(self) -> None:
-        self._events: Dict[str, List[WorkflowEvent]] = {}
+        self._events: dict[str, list[WorkflowEvent]] = {}
 
     async def append(self, event: WorkflowEvent) -> None:
         wid = event.workflow_id
@@ -21,5 +20,5 @@ class InMemoryEventStore(EventStore):
             self._events[wid] = []
         self._events[wid].append(event)
 
-    async def list_events(self, workflow_id: str) -> List[WorkflowEvent]:
+    async def list_events(self, workflow_id: str) -> list[WorkflowEvent]:
         return list(self._events.get(workflow_id, []))

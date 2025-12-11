@@ -1,10 +1,11 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
-from dag_engine.core import WorkflowDefinition as WorkflowDefinitionSchema, WorkflowManager
+from dag_engine.core import WorkflowDefinition as WorkflowDefinitionSchema
+from dag_engine.core import WorkflowManager
 from dag_service.ioc import AppContainer, get_container
 from dag_service.store import WorkflowDefinitionStore
+from fastapi import APIRouter, Depends, HTTPException
 
 logger = logging.getLogger(__name__)
 v1_router = APIRouter(tags=["Core API Endpoints"])
@@ -23,8 +24,7 @@ def get_manager(container: AppContainer = Depends(get_container)) -> WorkflowMan
 
 @v1_router.post("/workflow")
 async def register_workflow(
-    definition: WorkflowDefinition,
-    definition_store: WorkflowDefinitionStore = Depends(get_definition_store)
+    definition: WorkflowDefinition, definition_store: WorkflowDefinitionStore = Depends(get_definition_store)
 ):
     execution_id = str(uuid.uuid4())
     await definition_store.save_definition(execution_id, definition)
@@ -36,9 +36,7 @@ async def register_workflow(
 
 @v1_router.post("/workflow/trigger/{execution_id}")
 async def trigger_workflow(
-    execution_id: str,
-    container: AppContainer = Depends(get_container),
-    manager: WorkflowManager = Depends(get_manager)
+    execution_id: str, container: AppContainer = Depends(get_container), manager: WorkflowManager = Depends(get_manager)
 ):
     definition = await container.definition_store.get_definition(execution_id)
     if not definition:
@@ -55,21 +53,15 @@ async def trigger_workflow(
 
 
 @v1_router.get("/workflows/{instance_id}")
-async def get_workflow_status(
-    instance_id: str,
-    manager: WorkflowManager = Depends(get_manager)
-):
+async def get_workflow_status(instance_id: str, manager: WorkflowManager = Depends(get_manager)):
     try:
         return await manager.get_status(instance_id)
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Running workflow instance not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Running workflow instance not found") from exc
 
 
 @v1_router.get("/workflows/{instance_id}/results")
-async def get_results(
-    instance_id: str,
-    manager: WorkflowManager = Depends(get_manager)
-):
+async def get_results(instance_id: str, manager: WorkflowManager = Depends(get_manager)):
     try:
         status = await manager.get_results(instance_id)
         if status["state"] == "RUNNING":
@@ -80,5 +72,5 @@ async def get_results(
             "status": status["state"],
             "results": status["nodes"],
         }
-    except ValueError:
-        raise HTTPException(404, "Workflow not found")
+    except ValueError as exc:
+        raise HTTPException(404, "Workflow not found") from exc

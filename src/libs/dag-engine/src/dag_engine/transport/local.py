@@ -2,15 +2,15 @@ import asyncio
 import logging
 import typing as t
 
-from .messages import TaskMessage, ResultMessage
+from .messages import ResultMessage, TaskMessage
 from .protocols import Transport
-
 
 logger = logging.getLogger(__name__)
 
 
 class InMemoryTransport(Transport):
     """Simple in-process transport using asyncio.Queue for dev/testing."""
+
     def __init__(self):
         self._task_q: asyncio.Queue[TaskMessage | None] = asyncio.Queue()
         self._result_q: asyncio.Queue[ResultMessage | None] = asyncio.Queue()
@@ -23,7 +23,7 @@ class InMemoryTransport(Transport):
         logger.debug(f"publish_result {result}")
         await self._result_q.put(result)
 
-    async def subscribe_tasks(self) -> t.AsyncIterator[TaskMessage]:
+    async def subscribe_tasks(self) -> t.AsyncIterator[TaskMessage]:  # type: ignore[override]
         while True:
             msg = await self._task_q.get()
             # sentinel to stop: None
@@ -31,7 +31,7 @@ class InMemoryTransport(Transport):
                 return
             yield msg
 
-    async def subscribe_results(self) -> t.AsyncIterator[ResultMessage]:
+    async def subscribe_results(self) -> t.AsyncIterator[ResultMessage]:  # type: ignore[override]
         while True:
             msg = await self._result_q.get()
             if msg is None:

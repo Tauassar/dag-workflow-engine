@@ -1,5 +1,6 @@
 import json
 import typing as t
+
 from redis.asyncio import Redis
 
 from .protocols import WorkflowExecutionStore

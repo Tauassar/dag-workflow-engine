@@ -1,9 +1,9 @@
 import json
 import time
-from typing import Any, Dict, Optional
-from redis.asyncio import Redis
+from typing import Any
 
 from dag_engine.serializer import JSONResultSerializer
+from redis.asyncio import Redis
 
 from .protocol import ResultStore
 
@@ -29,7 +29,7 @@ class RedisResultStore(ResultStore):
         self,
         redis: Redis,
         namespace: str = "wf:results",
-        serializer: Optional[JSONResultSerializer] = None,
+        serializer: JSONResultSerializer | None = None,
     ):
         self.redis = redis
         self.namespace = namespace.rstrip(":")
@@ -50,7 +50,7 @@ class RedisResultStore(ResultStore):
         node_id: str,
         attempt: int,
         result: Any,
-        ttl_seconds: Optional[int] = None,
+        ttl_seconds: int | None = None,
     ) -> None:
 
         encoded_value = self.serializer.dumps(result)
@@ -76,7 +76,7 @@ class RedisResultStore(ResultStore):
     # --------------------------------------------------------
     # Fetch result for a single node
     # --------------------------------------------------------
-    async def get_result(self, workflow_id: str, node_id: str) -> Optional[Dict[str, Any]]:
+    async def get_result(self, workflow_id: str, node_id: str) -> dict[str, Any] | None:
         key = self.get_key(workflow_id, node_id)
         raw = await self.redis.get(key)
 
@@ -101,10 +101,10 @@ class RedisResultStore(ResultStore):
     # --------------------------------------------------------
     # List all results for workflow
     # --------------------------------------------------------
-    async def list_results(self, workflow_id: str) -> Dict[str, Dict[str, Any]]:
+    async def list_results(self, workflow_id: str) -> dict[str, dict[str, Any]]:
         pattern = f"{self.namespace}:{workflow_id}:*"
         cursor = 0
-        results: Dict[str, Dict[str, Any]] = {}
+        results: dict[str, dict[str, Any]] = {}
 
         while True:
             cursor, keys = await self.redis.scan(cursor, match=pattern, count=200)

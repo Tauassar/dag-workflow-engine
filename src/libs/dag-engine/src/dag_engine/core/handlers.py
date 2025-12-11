@@ -3,13 +3,12 @@ import typing as t
 
 from dag_engine.transport import TaskMessage
 
-
 Handler = t.Callable[[TaskMessage], t.Awaitable[t.Any]]
 
 
 class HandlerRegistry:
     def __init__(self) -> None:
-        self._handlers_by_type = {}
+        self._handlers_by_type: dict[str, Handler] = {}
 
     @property
     def handlers(self):
@@ -24,6 +23,8 @@ class HandlerRegistry:
         def decorator(func: Handler):
             self._register_handler(node_type, func)
             return func
+
         return decorator
+
 
 hregistry = HandlerRegistry()

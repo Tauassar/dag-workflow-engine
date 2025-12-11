@@ -1,7 +1,7 @@
 import json
-from redis.asyncio import Redis
 
 from dag_engine.core import WorkflowDefinition
+from redis.asyncio import Redis
 
 
 class WorkflowDefinitionStore:

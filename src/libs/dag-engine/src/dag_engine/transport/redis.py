@@ -1,11 +1,11 @@
 import json
 import logging
-from typing import AsyncIterator
+import typing as t
+
 from redis.asyncio import Redis
 
-from .messages import TaskMessage, ResultMessage
+from .messages import ResultMessage, TaskMessage
 from .protocols import Transport
-
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +59,7 @@ class RedisTransport(Transport):
 
     async def _ensure_consumer_group(self, stream: str, group: str):
         try:
-            await self.redis.xgroup_create(
-                name=stream, groupname=group, id="0", mkstream=True
-            )
+            await self.redis.xgroup_create(name=stream, groupname=group, id="0", mkstream=True)
         except Exception:
             # group already exists
             pass
@@ -71,24 +69,16 @@ class RedisTransport(Transport):
     # -------------------------------------------------------
     async def publish_task(self, task: TaskMessage) -> None:
         logger.debug("Publishing task: %s", {"json": task.model_dump_json()})
-        await self.redis.xadd(
-            self.tasks_stream,
-            {"json": task.model_dump_json()},
-            id="*"
-        )
+        await self.redis.xadd(self.tasks_stream, {"json": task.model_dump_json()}, id="*")
 
     async def publish_result(self, result: ResultMessage) -> None:
         logger.debug("Publishing result: %s", {"json": result.model_dump_json()})
-        await self.redis.xadd(
-            self.results_stream,
-            {"json": result.model_dump_json()},
-            id="*"
-        )
+        await self.redis.xadd(self.results_stream, {"json": result.model_dump_json()}, id="*")
 
     # -------------------------------------------------------
     # Subscribe to tasks (workers)
     # -------------------------------------------------------
-    async def subscribe_tasks(self) -> AsyncIterator[TaskMessage]:
+    async def subscribe_tasks(self) -> t.AsyncIterator[TaskMessage]:  # type: ignore[override]
         while True:
             resp = await self.redis.xreadgroup(
                 groupname=self.task_group,
@@ -108,7 +98,7 @@ class RedisTransport(Transport):
                         task = TaskMessage.model_validate(data)
                         yield task
                     except Exception as e:
-                        print("task decode failure:", e)
+                        logger.warning(f"task decode failure: {e}")
                     finally:
                         await self.redis.xack(self.tasks_stream, self.task_group, msg_id)
                         await self.redis.xdel(self.tasks_stream, msg_id)
@@ -116,7 +106,7 @@ class RedisTransport(Transport):
     # -------------------------------------------------------
     # Subscribe to results (DagOrchestrator)
     # -------------------------------------------------------
-    async def subscribe_results(self) -> AsyncIterator[ResultMessage]:
+    async def subscribe_results(self) -> t.AsyncIterator[ResultMessage]:  # type: ignore[override]
         while True:
             resp = await self.redis.xreadgroup(
                 groupname=self.result_group,
@@ -136,7 +126,7 @@ class RedisTransport(Transport):
                         result = ResultMessage.model_validate(data)
                         yield result
                     except Exception as e:
-                        print("result decode failure:", e)
+                        logger.warning(f"result decode failure: {e}")
                     finally:
                         await self.redis.xack(self.results_stream, self.result_group, msg_id)
                         await self.redis.xdel(self.results_stream, msg_id)

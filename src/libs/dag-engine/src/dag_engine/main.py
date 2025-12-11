@@ -1,30 +1,27 @@
 from __future__ import annotations
-import json
 
-import asyncio, time
+import asyncio
+import json
 import logging
+import time
 import uuid
 
-from dag_engine.core import DagOrchestrator,  WorkflowWorker
+from dag_engine.core import DagOrchestrator, WorkflowWorker
 from dag_engine.core.handlers import hregistry
 from dag_engine.event_store import RedisEventStore
 from dag_engine.idempotency_store import RedisIdempotencyStore
 from dag_engine.result_store import RedisResultStore
-from dag_engine.transport import TaskMessage, InMemoryTransport, RedisTransport
-from .core.workflow import WorkflowDAG
+from dag_engine.transport import InMemoryTransport, RedisTransport, TaskMessage
 from redis.asyncio import Redis
+
+from .core.workflow import WorkflowDAG
 
 redis = Redis(host="localhost", port=6379, decode_responses=True)
 
-logging.basicConfig(
-    level="DEBUG",
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
-)
+logging.basicConfig(level="DEBUG", format="%(asctime)s - %(levelname)s - %(name)s - %(message)s")
+logger = logging.getLogger(__name__)
 
-LOG_FORMAT = (
-    "%(asctime)s [%(levelname)s] "
-    "%(filename)s:%(lineno)d (%(funcName)s) — %(message)s"
-)
+LOG_FORMAT = "%(asctime)s [%(levelname)s] " "%(filename)s:%(lineno)d (%(funcName)s) — %(message)s"
 
 # logging.basicConfig(
 #     level=logging.DEBUG,
@@ -82,6 +79,7 @@ USER_JSON = """{
 
 dag = WorkflowDAG.from_dict(json.loads(USER_JSON), workflow_id=str(uuid.uuid4()))
 
+
 @hregistry.handler("input")
 async def input_handler(task: TaskMessage):
     # produce initial payload
@@ -94,14 +92,18 @@ async def call_external_service(task: TaskMessage):
     # Simulate HTTP call
     await asyncio.sleep(0.05)
     # return data including config echo
-    return {"node": task.node_id, "url": task.config.get("url"), "fetched_at": time.time(), "user_id": task.config.get("user_id")}
+    return {
+        "node": task.node_id,
+        "url": task.config.get("url"),
+        "fetched_at": time.time(),
+        "user_id": task.config.get("user_id"),
+    }
 
 
 @hregistry.handler("output")
 async def output_handler(task: TaskMessage):
     await asyncio.sleep(0.01)
     return {"node": task.node_id, "aggregated": True, "note": "aggregation done by DagOrchestrator", "ctx": task}
-
 
 
 # --- Run the workflow ---
@@ -114,7 +116,7 @@ async def main():
         results_stream="engine:results",
         task_group="engine-task-group",
         result_group="engine-result-group",
-        consumer_name="controller",   # for DagOrchestrator
+        consumer_name="controller",  # for DagOrchestrator
     )
     worker_transport = RedisTransport(
         redis=redis,
@@ -143,12 +145,16 @@ async def main():
     await dag_service.start()
 
     # start external workers (they read tasks via transport)
-    worker1 = WorkflowWorker(worker_transport, hregistry.handlers, idemp_store, result_store=result_store, worker_id="w1")
-    worker2 = WorkflowWorker(worker2_transport, hregistry.handlers, idemp_store, result_store=result_store, worker_id="w2")
+    worker1 = WorkflowWorker(
+        worker_transport, hregistry.handlers, idemp_store, result_store=result_store, worker_id="w1"
+    )
+    worker2 = WorkflowWorker(
+        worker2_transport, hregistry.handlers, idemp_store, result_store=result_store, worker_id="w2"
+    )
 
     # run workers in background
-    wtask1 = asyncio.create_task(worker1.run())
-    wtask2 = asyncio.create_task(worker2.run())
+    asyncio.create_task(worker1.run())
+    asyncio.create_task(worker2.run())
 
     # wait for workflow to finish (DagOrchestrator watches results and updates DAG)
     await dag_service.wait_until_finished()
@@ -165,11 +171,12 @@ async def main():
     results = dag_service.collect_results()
     events = await event_store.list_events(dag.workflow_id)
 
-    print("=== RESULTS ===")
-    print(json.dumps(results, indent=2))
-    print("\n=== EVENTS ===")
+    logger.info("=== RESULTS ===")
+    logger.info(json.dumps(results, indent=2))
+    logger.info("\n=== EVENTS ===")
     for e in events:
-        print(e.model_dump())
+        logger.info(e.model_dump())
+
 
 if __name__ == "__main__":
     asyncio.run(main())

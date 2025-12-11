@@ -1,6 +1,7 @@
-import pydantic as pd
-import typing as t
 import time
+import typing as t
+
+import pydantic as pd
 
 from .constants import WorkflowEventType
 

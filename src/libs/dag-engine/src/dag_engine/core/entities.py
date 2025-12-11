@@ -1,5 +1,4 @@
 import typing as t
-
 from dataclasses import dataclass, field
 
 from .constants import NodeStatus
@@ -18,9 +17,10 @@ class DagNode:
     retry_policy: RetryPolicy | None = None
     timeout_seconds: float | None = None
     status: NodeStatus = NodeStatus.PENDING
-    last_error: Exception | None = None
+    last_error: Exception | str | None = None
     attempt: int = 0
     result: t.Any = None
     started_at: float | None = None
     finished_at: float | None = None
     deadline_at: float | None = None
+    blocked_by: list[str] | None = None

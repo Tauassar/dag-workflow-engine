@@ -3,18 +3,19 @@ from __future__ import annotations
 import logging
 import time
 import typing as t
-import asyncio
 from collections import deque
 
+from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
+
 from . import NodeStatus
+from .entities import DagNode
 from .exceptions import DagValidationError
 from .schemas import (
     WorkflowDefinition,
 )
-from .entities import DagNode
-from dag_engine.event_store import EventStore
-from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
 
+if t.TYPE_CHECKING:
+    from dag_engine.event_store import EventStore
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +55,6 @@ class WorkflowDAG:
         # check cycles (Kahn)
         self._validate_acyclic()
 
-        self._task_queue: asyncio.Queue = asyncio.Queue()
-        self._inflight = set()
-        self._lock = asyncio.Lock()
-
     async def _emit_event(self, event: WorkflowEvent) -> None:
         if self.event_store:
             await self.event_store.append(event)
@@ -81,17 +78,16 @@ class WorkflowDAG:
             raise ValueError("Workflow contains cycle(s)")
 
     @classmethod
-    def from_definition(cls, definition: WorkflowDefinition, *args: t.Any, **kwargs: t.Any) -> t.Self:
-        return cls(definition=definition, *args, **kwargs)
+    def from_definition(cls, definition: WorkflowDefinition, **kwargs: t.Any) -> t.Self:
+        return cls(definition=definition, **kwargs)
 
     @classmethod
-    def from_dict(cls, input_dict: dict, *args: t.Any, **kwargs: t.Any) -> t.Self:
+    def from_dict(cls, input_dict: dict, **kwargs: t.Any) -> t.Self:
         return cls.from_definition(
-            definition=WorkflowDefinition.model_validate(
+            WorkflowDefinition.model_validate(
                 input_dict,
                 by_alias=True,
             ),
-            *args,
             **kwargs,
         )
 
@@ -126,10 +122,7 @@ class WorkflowDAG:
                     continue
 
                 # Only block if any dependency is FAILED
-                failed_parents = [
-                    pid for pid in child.depends_on
-                    if self.nodes[pid].status == NodeStatus.FAILED
-                ]
+                failed_parents = [pid for pid in child.depends_on if self.nodes[pid].status == NodeStatus.FAILED]
 
                 if failed_parents:
                     # Better to use BLOCKED status

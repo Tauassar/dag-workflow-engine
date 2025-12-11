@@ -4,9 +4,8 @@ import time
 import typing as t
 
 from dag_engine.core import NodeStatus
-from dag_engine.event_sourcing import WorkflowEventType, WorkflowEvent
+from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
 from dag_engine.idempotency_store import IdempotencyStore
-
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +26,9 @@ class TimeoutMonitor:
         self,
         dag,
         idempotency_store: IdempotencyStore,
-        event_handler: t.Callable[[...], t.Awaitable[None]] | None = None,
+        event_handler: t.Callable[[...], t.Awaitable[None]] | None = None,  # type: ignore[misc]
         check_interval: float = 1.0,
-        dispatch_retry_callback: t.Callable[[str], t.Any] = None,
+        dispatch_retry_callback: t.Callable[[str], t.Any] | None = None,
     ):
         """
         Args:
@@ -70,9 +69,7 @@ class TimeoutMonitor:
         if not self.event_handler:
             return
 
-        await self.event_handler(
-            WorkflowEvent(*args, **kwargs)
-        )
+        await self.event_handler(WorkflowEvent(*args, **kwargs))
 
     # ---------------------------------------
     async def _run(self):
@@ -83,7 +80,7 @@ class TimeoutMonitor:
         except asyncio.CancelledError:
             return
         except Exception as exc:
-            print("TimeoutMonitor error:", exc)
+            logger.warning(f"TimeoutMonitor error: {exc}")
 
     # ---------------------------------------
     async def _check_timeouts(self):
@@ -110,10 +107,7 @@ class TimeoutMonitor:
 
                 # Idempotency: ensure timeout once per attempt
                 tkey = f"timeout:{self.dag.workflow_id}:{nid}:{node.attempt}"
-                ok = await self.idempotency_store.set_if_absent(
-                    tkey,
-                    ttl_seconds=int(node.timeout_seconds or 60)
-                )
+                ok = await self.idempotency_store.set_if_absent(tkey, ttl_seconds=int(node.timeout_seconds or 60))
                 if not ok:
                     continue  # already processed elsewhere
 

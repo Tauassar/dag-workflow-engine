@@ -1,8 +1,6 @@
 import logging
 import uuid
 
-from redis.asyncio import Redis
-
 from dag_engine.core import WorkflowWorker
 from dag_engine.core.handlers import hregistry
 from dag_engine.core.manager import WorkflowManager
@@ -11,9 +9,10 @@ from dag_engine.execution_store import RedisExecutionStore
 from dag_engine.idempotency_store import RedisIdempotencyStore
 from dag_engine.result_store import RedisResultStore
 from dag_engine.transport import RedisTransport
+from redis.asyncio import Redis
+
 from .config import Settings, settings
 from .store import WorkflowDefinitionStore
-
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ class AppContainer:
             results_stream="engine:results",
             task_group="engine-task-group",
             result_group="engine-result-group",
-            consumer_name="controller",   # for DagOrchestrator
+            consumer_name="controller",  # for DagOrchestrator
         )
         self.worker_transport = RedisTransport(
             self.redis,
@@ -62,7 +61,7 @@ class AppContainer:
             hregistry.handlers,
             self.idempotency_store,
             result_store=self.result_store,
-            worker_id=f"w{self._id}"
+            worker_id=f"w{self._id}",
         )
 
     async def init_orchestrator(self):

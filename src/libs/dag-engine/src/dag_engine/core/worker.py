@@ -1,9 +1,11 @@
 import traceback
+import typing as t
 
-from .handlers import Handler
 from dag_engine.idempotency_store import IdempotencyStore
 from dag_engine.result_store import ResultStore
-from dag_engine.transport import ResultType, ResultMessage, Transport, TaskMessage
+from dag_engine.transport import ResultMessage, ResultType, TaskMessage, Transport
+
+from .handlers import Handler
 
 
 class WorkflowWorker:
@@ -39,7 +41,7 @@ class WorkflowWorker:
         Main loop. Continuously listens for tasks from transport.
         Stop by setting self._stop or transport closing the stream.
         """
-        async for task in self.transport.subscribe_tasks():
+        async for task in t.cast(t.AsyncIterator[TaskMessage], self.transport.subscribe_tasks()):
             if task is None:
                 return
             await self._handle_task(task)
@@ -64,8 +66,7 @@ class WorkflowWorker:
 
         if handler is None:
             await self._publish_failure(
-                task,
-                f"Worker {self.worker_id}: No handler registered for node type '{task.node_type}'"
+                task, f"Worker {self.worker_id}: No handler registered for node type '{task.node_type}'"
             )
             return
 
@@ -83,9 +84,7 @@ class WorkflowWorker:
                     result=result_value,
                     ttl_seconds=self.result_ttl,
                 )
-                pointer = {
-                    "result_key": self.result_store.get_key(task.workflow_id, task.node_id)
-                }
+                pointer = {"result_key": self.result_store.get_key(task.workflow_id, task.node_id)}
 
             # Publish success (payload is either pointer or actual result)
             await self.transport.publish_result(
@@ -102,7 +101,7 @@ class WorkflowWorker:
         except Exception as exc:
             await self._publish_failure(task, str(exc), exc)
 
-    async def _publish_failure(self, task: TaskMessage, error: str, exc: Exception = None):
+    async def _publish_failure(self, task: TaskMessage, error: str, exc: Exception | None = None):
         """
         Publish a FAILED ResultMessage.
         """

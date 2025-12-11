@@ -1,7 +1,6 @@
 import asyncio
 
 import uvicorn
-
 from dag_service.app import app
 from dag_service.config import settings
 

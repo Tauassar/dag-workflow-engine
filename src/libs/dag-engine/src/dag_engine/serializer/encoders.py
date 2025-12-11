@@ -1,9 +1,10 @@
-import json
-import decimal
-import pydantic as pd
-import uuid
 import datetime
+import decimal
+import json
+import uuid
 from typing import Any
+
+import pydantic as pd
 
 
 class WorkflowJSONEncoder(json.JSONEncoder):
@@ -34,7 +35,7 @@ class WorkflowJSONEncoder(json.JSONEncoder):
 
         if isinstance(obj, pd.BaseModel):
             # ISO 8601 is machine-readable and portable
-            return obj.model_dump(mode='json')
+            return obj.model_dump(mode="json")
 
         # Support custom objects providing __json__()
         if hasattr(obj, "__json__") and callable(obj.__json__):

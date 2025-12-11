@@ -3,17 +3,18 @@ import logging
 import time
 import typing as t
 
-from .entities import DagNode
+from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
+from dag_engine.event_store import EventStore
+from dag_engine.idempotency_store import IdempotencyStore
+from dag_engine.result_store import ResultStore
+from dag_engine.transport import ResultMessage, ResultType, TaskMessage, Transport
+
 from .constants import NodeStatus
+from .entities import DagNode
 from .exceptions import MissingDependencyError, TemplateResolutionError
 from .templates import TemplateResolver
 from .timeout_monitor import TimeoutMonitor
 from .workflow import WorkflowDAG
-from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
-from dag_engine.event_store import EventStore
-from dag_engine.transport import Transport, TaskMessage, ResultMessage, ResultType, InMemoryTransport
-from dag_engine.result_store import ResultStore
-from dag_engine.idempotency_store import IdempotencyStore
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +65,7 @@ class DagOrchestrator:
         self._result_task: asyncio.Task | None = None
 
         # template resolver uses an async result provider
-        self.template_resolver = TemplateResolver(
-            result_provider=self._async_read_node_result_value
-        )
+        self.template_resolver = TemplateResolver(result_provider=self._async_read_node_result_value)
 
     def _is_finished(self) -> bool:
         """
@@ -74,10 +73,7 @@ class DagOrchestrator:
         """
         for node in self.dag.nodes.values():
             if node.status in (NodeStatus.RUNNING, NodeStatus.PENDING):
-                failed_parents = [
-                    p for p in node.depends_on
-                    if self.dag.nodes[p].status == NodeStatus.FAILED
-                ]
+                failed_parents = [p for p in node.depends_on if self.dag.nodes[p].status == NodeStatus.FAILED]
                 if failed_parents:
                     node.status = NodeStatus.FAILED
                     node.blocked_by = failed_parents
@@ -130,11 +126,7 @@ class DagOrchestrator:
 
         node.status = NodeStatus.RUNNING
         node.started_at = time.time()
-        node.deadline_at = (
-            node.started_at + node.timeout_seconds
-            if node.timeout_seconds
-            else None
-        )
+        node.deadline_at = node.started_at + node.timeout_seconds if node.timeout_seconds else None
 
         await self._emit_event(
             WorkflowEvent(
@@ -189,7 +181,7 @@ class DagOrchestrator:
     # Result listener loop
     # ---------------------------------------------------------
     async def _result_loop(self) -> None:
-        async for result in self.transport.subscribe_results():
+        async for result in t.cast(t.AsyncIterator[ResultMessage], self.transport.subscribe_results()):
             await self._handle_result(result)
 
     async def _check_complete(self):
@@ -209,17 +201,13 @@ class DagOrchestrator:
         async with self._lock:
             node = self.dag.nodes.get(res.node_id)
             if node is None or node.status != NodeStatus.RUNNING:
-                logger.debug(
-                    f"Failed node {res.node_id} received result {res.payload}, discarding it"
-                )
+                logger.debug(f"Failed node {res.node_id} received result {res.payload}, discarding it")
                 return
 
             # Ignore stale results: attempt mismatch (stale response)
             if res.attempt != node.attempt:
                 # ignore stale/late result
-                logger.debug(
-                    f"Node {res.node_id}, received stale result {res.payload}"
-                )
+                logger.debug(f"Node {res.node_id}, received stale result {res.payload}")
                 return
 
             logger.debug(f"Received result for node {res.node_id}, attempt {res.attempt}, node attempt {node.attempt}")
@@ -284,7 +272,6 @@ class DagOrchestrator:
                 self.dag.nodes[d].status == NodeStatus.COMPLETED for d in dep.depends_on
             ):
                 await self._publish_task(dep)
-
 
     # ---------------------------------------------------------
     # FAILURE HANDLING
