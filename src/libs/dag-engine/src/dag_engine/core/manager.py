@@ -148,9 +148,6 @@ class WorkflowManager:
         except Exception:
             pass
 
-        # TODO: If you want, you can clean up idempotency keys using SCAN
-        # e.g., f"dispatch:{workflow_id}:*" and f"exec:{workflow_id}:*"
-
         async with self._lock:
             del self.workflows[workflow_id]
 
