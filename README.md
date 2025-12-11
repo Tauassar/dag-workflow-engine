@@ -5,7 +5,7 @@ The system accepts JSON-based workflow definitions (Directed Acyclic Graphs), pa
 orchestrate the execution of tasks across distributed workers.
 The engine supports parallel execution of independent branches, manage complex data
 passing between nodes, and handle asynchronous task lifecycles using a message broker.
-
+---
 ## Technical Stack
 - **Language**: Python 3.13 (Type hinted + checked with MyPy)
 - **Database**: In-Memory (Redis)
@@ -14,6 +14,7 @@ passing between nodes, and handle asynchronous task lifecycles using a message b
 - **Containerization**: Docker & Docker Compose (all services containerized)
 - **Package and Environment management**: UV
 
+---
 
 ## Structure
 
@@ -25,6 +26,7 @@ Full documentation on core library and architecture details can be found in [/sr
 
 Full documentation on Worker nodes and HTTP API implementation can be found in service's [README.md](src/services/dag-service/README.md)
 
+---
 
 ## How to trigger the test workflows
 
@@ -34,6 +36,7 @@ Full documentation on Worker nodes and HTTP API implementation can be found in s
 4. Obtain state in **`GET`** /api/workflows/:instance_id, this is an endpoint for obtaining running workflow instance current state
 5. Obtain result in **`GET`** /api/workflows/:instance_id/results, this is an endpoint for obtaining results for finished workflow instances
 
+---
 
 ## Settings
 
@@ -52,12 +55,14 @@ Following settings can be set using env variables
 - API_ENABLE_DOCS: bool = True
 - BACKEND_CORS_ORIGINS: list[pd.AnyHttpUrl] | str = []
 
+---
+
 ## Installation
 
 This project uses **UV** as its package and environment management system.
 To run the services locally or in a containerized setup, ensure UV (and optionally Docker) are installed on your machine.
 
----
+
 
 ## Running with Docker & Docker Compose
 
@@ -81,8 +86,9 @@ http://localhost:8000/api/docs
 
 The compose file automatically handles service-to-service networking, environment setup, and process orchestration.
 
+---
 
-### Running Locally with UV
+## Running Locally with UV
 
 This project uses **UV** as its package and environment management system.
 If you do not have UV installed, please follow the official installation guide:
@@ -112,15 +118,15 @@ Each worker connects to the orchestrator and dynamically pulls tasks from the qu
 
 ## Basic Commands
 
-#### Running linters + MyPy
+### Running linters + MyPy
 
      pre-commit run --all-files
 
-#### Running pre-commit linters individually
+### Running pre-commit linters individually
 
       pre-commit run {{linter_id}} --all-files
 
-example
+#### Example
 
       pre-commit run mypy --all-files
 
@@ -128,10 +134,10 @@ linter_id for each individual linter can be found in [.pre-commit-config.yaml](.
 
 linter configurations are set inside [.pre-commit-config.yaml](.pre-commit-config.yaml) and [pyproject.toml](pyproject.toml) files
 
-#### Running tests with pytest
+### Running tests with pytest
 
     uv run pytest
 
-### Docker
+## Docker
 
 Dockerfile and entrypoint can be found in [/docker](docker) folder.

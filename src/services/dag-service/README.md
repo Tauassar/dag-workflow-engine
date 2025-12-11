@@ -10,8 +10,10 @@
 - /[server.py](src/dag_service/server.py) - Uvicorn server config and launcher
 - /[store.py](src/dag_service/store.py) - Redis persistent storage for storing workflow represented as json
 
-
+---
 ## Service components
+
+---
 
 - ### HTTP WEB API + Workflow Orchestrator(WF Orchestrator)
 
@@ -35,7 +37,9 @@ Component responsible for:
 - **`GET`** /api/docs - Swagger UI.
 - **`GET`** /api/openapi.json - OpenAPI schema.
 
-### Workflow Orchestrator
+---
+
+- ### Workflow Orchestrator
 Component responsible for management of workflow process execution and lifecycle management of the individual workflows as well as spawning new workflow processes and recording process execution data.
 
 ##### Features
@@ -43,6 +47,8 @@ Component responsible for management of workflow process execution and lifecycle
 - **Parallelism:** Independent nodes dispatches simultaneously.
 - **State Management(nodes):** The system tracks the state of every node (**PENDING**, **RUNNING**, **COMPLETED**, **FAILED**).
 - **State Management(workflow):** The system tracks the state of workflow process (**RUNNING**, **COMPLETED**, **FAILED**).
+
+---
 
 - ### Worker nodes
 Component responsible for actual execution of nodes with handlers.

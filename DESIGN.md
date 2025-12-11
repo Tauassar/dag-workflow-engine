@@ -23,6 +23,7 @@ if node.status == PENDING and all(parent.status == COMPLETED for parent in node.
 - More complex, harder to implement
 - Harder to guarantee correctness in partial failures
 
+---
 
 ## Handling Fan-In
 
@@ -36,6 +37,7 @@ if node.status == PENDING and all(parent.status == COMPLETED for parent in node.
 - Harder shutdown recovery logic
 - Cannot easily be offloaded entirely to persistent storage without complex atomic updates
 
+---
 
 ## Timeout Detection
 
@@ -51,6 +53,7 @@ If exceeded, retry attempt is dispatched. If attempts exhausted -> node fails ->
 ### Alternatives
 - workers sending heartbeats (more complex)
 
+---
 
 ## External Result Storage
 Worker execution results are stored in external storage, rather than passing them through message broker
@@ -68,6 +71,7 @@ Worker execution results are stored in external storage, rather than passing the
 ### Alternatives
 - workers sending heartbeats (more complex)
 
+---
 
 ## Idempotency Design
 
@@ -80,6 +84,7 @@ Using dedicated dispatch:{workflow_id}:{node_id}:{attempt} and exec:{workflow_id
 ### Trade-off:
 - Additional storage
 
+---
 
 ## High level working architecture
 
