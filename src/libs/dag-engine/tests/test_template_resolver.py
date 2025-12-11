@@ -46,10 +46,6 @@ async def test_resolve_multiple_templates():
     assert result == "123 + hello"
 
 
-# ---------------------------------------------------------------------------
-# DICT & LIST RECURSION
-# ---------------------------------------------------------------------------
-
 @pytest.mark.asyncio
 async def test_resolve_dict_templates():
     r = TemplateResolver(fake_result_provider)
@@ -104,10 +100,6 @@ async def test_object_attribute_resolution():
     result = await r.resolve("wf", "{{ obj.attr }}")
     assert result == "ATTR_VALUE"
 
-
-# ---------------------------------------------------------------------------
-# ERROR CASES
-# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_missing_dependency():

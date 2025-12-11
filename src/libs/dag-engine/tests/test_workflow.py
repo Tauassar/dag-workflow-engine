@@ -10,10 +10,6 @@ from dag_engine.core.schemas import WorkflowDefinition
 from dag_engine.event_sourcing import WorkflowEventType, WorkflowEvent
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def make_definition(nodes):
     """Utility: create WorkflowDefinition from simple dict list."""
     return WorkflowDefinition(
@@ -21,10 +17,6 @@ def make_definition(nodes):
         dag={"nodes": nodes}
     )
 
-
-# ---------------------------------------------------------------------------
-# DAG CONSTRUCTION
-# ---------------------------------------------------------------------------
 
 def test_build_dag_simple():
     definition = make_definition([
@@ -48,10 +40,6 @@ def test_build_dag_missing_dependency():
     with pytest.raises(DagValidationError):
         WorkflowDAG.from_definition(workflow_id="wf1", definition=definition)
 
-
-# ---------------------------------------------------------------------------
-# CYCLE DETECTION
-# ---------------------------------------------------------------------------
 
 def test_cycle_detection_direct():
     definition = make_definition([
@@ -82,10 +70,6 @@ def test_acyclic_valid():
     WorkflowDAG.from_definition(workflow_id="ok", definition=definition)  # no exception
 
 
-# ---------------------------------------------------------------------------
-# CLASSMETHOD HELPERS
-# ---------------------------------------------------------------------------
-
 def test_from_definition():
     definition = make_definition([
         {"id": "a", "handler": "input", "dependencies": []},
@@ -106,10 +90,6 @@ def test_from_dict():
     dag = WorkflowDAG.from_dict(d, workflow_id="Y")
     assert set(dag.nodes.keys()) == {"a"}
 
-
-# ---------------------------------------------------------------------------
-# BLOCK DEPENDENTS
-# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_block_dependents_basic():
@@ -195,10 +175,6 @@ async def test_block_dependents_requires_failed_state():
     # No state changes
     assert dag.nodes["b"].status == NodeStatus.PENDING
 
-
-# ---------------------------------------------------------------------------
-# EVENT STORE INTEGRATION
-# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
 async def test_block_dependents_emits_event():
