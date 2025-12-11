@@ -17,7 +17,7 @@ passing between nodes, and handle asynchronous task lifecycles using a message b
 
 ## Structure
 
-- [/docker](docker) Dockerfile and docker entrypoint 
+- [/docker](docker) Dockerfile and docker entrypoint
 - [/src/libs/dag-engine](src/libs/dag-engine) Core engine logic wrapped in library format
 - [/src/services/dag-service](src/services/dag-service) Actual HTTP API + Orchestrator + Worker implementation
 
@@ -45,7 +45,7 @@ Following settings can be set using env variables
 
 ## Installation
 
-This project uses **UV** as its package and environment management system.  
+This project uses **UV** as its package and environment management system.
 To run the services locally or in a containerized setup, ensure UV (and optionally Docker) are installed on your machine.
 
 ---
@@ -75,7 +75,7 @@ The compose file automatically handles service-to-service networking, environmen
 
 ### Running Locally with UV
 
-This project uses **UV** as its package and environment management system.  
+This project uses **UV** as its package and environment management system.
 If you do not have UV installed, please follow the official installation guide:
 
 **https://docs.astral.sh/uv/getting-started/installation/**

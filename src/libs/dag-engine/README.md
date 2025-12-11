@@ -24,7 +24,7 @@ The engine executes workflows defined as JSON-based DAGs, dispatches tasks to wo
 ### Distributed Execution
 - Workers pull tasks from Redis Streams
 - Orchestrator pushes tasks and consumes results
-- Retry logic built-in. 
+- Retry logic built-in.
 - Idempotency on worker nodes guaranteed by Redis keys: `exec:{workflow_id}:{node_id}`
 - Idempotency orchestrator guaranteed by Redis keys composed key `dispatch:{self.dag.workflow_id}:{node.id}:{node.attempt}`
 - Authoritative timeout monitoring for long-running tasks
@@ -63,7 +63,7 @@ Templates automatically resolve using `TemplateResolver` before tasks are dispat
 - Multiple workers per workflow
 
 ### Development
-- Implemented local alternatives for redis store/transport implementations for development and local testing purposes 
+- Implemented local alternatives for redis store/transport implementations for development and local testing purposes
 
 
 ## Structure overview & explanation
@@ -76,7 +76,7 @@ Templates automatically resolve using `TemplateResolver` before tasks are dispat
 │   ├── constants.py
 │   ├── entities.py
 │   ├── exceptions.py
-│   ├── handlers.py             # handlers registry and typing abstraction 
+│   ├── handlers.py             # handlers registry and typing abstraction
 │   ├── manager.py              # utility to manage multiple Orchestrator executions, launches, builds and records individual workflow execution in persistant storage
 │   ├── orchestrator.py         # main Orchestration logic, starts and manages full workflow execution lyfecycle, retries failed nodes and handles results
 │   ├── schemas.py

@@ -57,7 +57,7 @@ Worker execution results are stored in external storage, rather than passing the
 
 ## Benefits:
 - Allow pass huge execution results
-- High durability 
+- High durability
 - Easy result aggregation
 - Simplifies template resolution
 - Can be utilized as additional idempotency flag
@@ -92,7 +92,7 @@ Using dedicated dispatch:{workflow_id}:{node_id}:{attempt} and exec:{workflow_id
 |                                 |                                          |
 |                                 v                                          |
 |                      +------------------------+                            |
-|                      |  Workflow Definition   |                            |  
+|                      |  Workflow Definition   |                            |
 |                      |      JSON in Redis     |                            |
 |                      +------------+-----------+                            |
 |                                 |                                          |
@@ -100,7 +100,7 @@ Using dedicated dispatch:{workflow_id}:{node_id}:{attempt} and exec:{workflow_id
 |                   +--------------+-----------------+                       |
 |                   |       WorkflowManager          |                       |
 |                   |      Orchestrator Spawn        |                       |
-|                   +---------+-----------+----------+                       |  
+|                   +---------+-----------+----------+                       |
 |                        |                       |                           |
 |                        | dispatch              | receive                   |
 |                        v                       v                           |
