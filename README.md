@@ -21,7 +21,7 @@ passing between nodes, and handle asynchronous task lifecycles using a message b
 - [/src/libs/dag-engine](src/libs/dag-engine) Core engine logic wrapped in library format
 - [/src/services/dag-service](src/services/dag-service) Actual HTTP API + Orchestrator + Worker implementation
 
-Full documentation on core library and architecture details can be found in [pyproject.toml](src/libs/dag-engine/pyproject.toml)
+Full documentation on core library and architecture details can be found in [/src/libs/dag-engine/README.md](src/libs/dag-engine/README.md) and [DESIGN.md](DESIGN.md)
 
 Full documentation on Worker nodes and HTTP API implementation can be found in service's [README.md](src/services/dag-service/README.md)
 
