@@ -21,4 +21,4 @@ app = FastAPI(
     docs_url=(f"{settings.API_STR}/docs" if settings.API_ENABLE_DOCS else None),
     lifespan=lifespan,
 )
-app.include_router(v1_router)
+app.include_router(v1_router, prefix=settings.API_STR)
