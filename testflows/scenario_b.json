@@ -1,0 +1,39 @@
+//Scenario B (Fan-Out/Fan-In): A triggers B and C (in parallel). D waits for both B and C to finish. D aggregates results from both.
+
+{
+  "name": "Scenario B (Fan-Out/Fan-In)",
+  "dag": {
+    "nodes": [
+      {
+        "id": "input",
+        "handler": "input",
+        "dependencies": []
+      },
+      {
+        "id": "get_user",
+        "handler": "call_external_service",
+        "dependencies": ["input"],
+        "config": {
+          "url": "http://localhost:8911/document/policy/list/{{input.input_payload.user_id}}",
+          "user_id": "{{input.input_payload.user_id}}"
+        }
+      },
+      {
+        "id": "get_comments",
+        "handler": "call_external_service",
+        "dependencies": ["input"],
+        "config": {
+          "url": "http://localhost:8911/document/policy/list"
+        }
+      },
+      {
+        "id": "output",
+        "handler": "output",
+        "dependencies": [
+          "get_user",
+          "get_comments"
+        ]
+      }
+    ]
+  }
+}

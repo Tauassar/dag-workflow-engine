@@ -1,0 +1,59 @@
+//Scenario C (Full extensive scenario): Comprehensive scenaro that triggers both scenarios A and B,
+// additionally testing tempating logic and all types of worker implementations described in
+// 4. Worker Implementation & Mocking section.
+
+{
+  "name": "Scenario C",
+  "dag": {
+    "nodes": [
+      {
+        "id": "input",
+        "handler": "input",
+        "dependencies": []
+      },
+      {
+        "id": "get_user",
+        "handler": "call_external_service",
+        "dependencies": ["input"],
+        "config": {
+          "url": "http://localhost:8911/document/policy/list/{{input.input_payload.user_id}}",
+          "user_id": "{{input.input_payload.user_id}}"
+        }
+      },
+      {
+        "id": "get_posts",
+        "handler": "call_external_service",
+        "dependencies": ["input"],
+        "config": {
+          "url": "http://localhost:8911/document/policy/list"
+        }
+      },
+      {
+        "id": "get_comments",
+        "handler": "call_external_service",
+        "dependencies": ["input"],
+        "config": {
+          "url": "http://localhost:8911/document/policy/list"
+        }
+      },
+      {
+        "id": "get_ai_answer",
+        "handler": "call_llm_service",
+        "dependencies": ["get_comments"],
+        "config": {
+          "content": "{{get_comments.fetched_content}}",
+          "prompt": "AI can evaluate content obtained from url {content}"
+        }
+      },
+      {
+        "id": "output",
+        "handler": "output",
+        "dependencies": [
+          "get_user",
+          "get_posts",
+          "get_comments"
+        ]
+      }
+    ]
+  }
+}

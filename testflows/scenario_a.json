@@ -1,0 +1,30 @@
+//Scenario A (Linear): A → B → C. C must receive data from B (or A).
+
+{
+  "name": "Linear: Scenario A",
+  "dag": {
+    "nodes": [
+      {
+        "id": "input",
+        "handler": "input",
+        "dependencies": []
+      },
+      {
+        "id": "get_user",
+        "handler": "call_external_service",
+        "dependencies": ["input"],
+        "config": {
+          "url": "http://localhost:8911/document/policy/list/{{input.input_payload.user_id}}",
+          "user_id": "{{input.input_payload.user_id}}"
+        }
+      },
+      {
+        "id": "output",
+        "handler": "output",
+        "dependencies": [
+          "get_user"
+        ]
+      }
+    ]
+  }
+}
