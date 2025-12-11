@@ -15,14 +15,20 @@ async def input_handler(_: TaskMessage):
 @hregistry.handler("call_external_service")
 async def call_external_service(task: TaskMessage):
     # Simulate HTTP call
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(2)
     # return data including config echo
     return {
         "node": task.node_id,
         "url": task.config.get("url"),
+        "fetched_content": "some sample content",
         "fetched_at": time.time(),
-        "user_id": task.config.get("user_id"),
     }
+
+
+@hregistry.handler("call_llm_service")
+async def call_llm_service(task: TaskMessage):
+    await asyncio.sleep(0.1)
+    return f"Here is sample response for original {task.config.get("prompt").format(**task.config)} prompt"
 
 
 @hregistry.handler("output")
