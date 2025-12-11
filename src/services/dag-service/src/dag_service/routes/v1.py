@@ -74,9 +74,6 @@ async def get_results(
     if not info:
         raise HTTPException(status_code=404, detail="Execution not found")
 
-    if not info.is_finished:
-        raise HTTPException(status_code=400, detail="Workflow not finished")
-
     return {
         "instance_id": instance_id,
         "status": info.status,
