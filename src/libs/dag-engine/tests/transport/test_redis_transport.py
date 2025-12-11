@@ -29,7 +29,7 @@ def make_result(node_id="A"):
 
 
 @pytest.mark.asyncio
-async def test_streams_and_groups_created(redis, transport):
+async def test_streams_and_groups_created(redis, rtransport):
     # Streams must exist (use xinfo_stream which works with fakeredis)
     info_tasks = await redis.xinfo_stream("tasks")
     info_results = await redis.xinfo_stream("results")
@@ -47,14 +47,14 @@ async def test_streams_and_groups_created(redis, transport):
 
 
 @pytest.mark.asyncio
-async def test_publish_and_subscribe_tasks(redis, transport):
+async def test_publish_and_subscribe_tasks(redis, rtransport):
     t1 = make_task("A")
-    await transport.publish_task(t1)
+    await rtransport.publish_task(t1)
 
     received = []
 
     async def reader():
-        async for msg in transport.subscribe_tasks():
+        async for msg in rtransport.subscribe_tasks():
             received.append(msg)
             break
 
@@ -76,14 +76,14 @@ async def test_publish_and_subscribe_tasks(redis, transport):
 
 
 @pytest.mark.asyncio
-async def test_publish_and_subscribe_results(redis, transport):
+async def test_publish_and_subscribe_results(redis, rtransport):
     r1 = make_result("A")
-    await transport.publish_result(r1)
+    await rtransport.publish_result(r1)
 
     received = []
 
     async def reader():
-        async for msg in transport.subscribe_results(wf_id="wf1"):
+        async for msg in rtransport.subscribe_results(wf_id="wf1"):
             received.append(msg)
             break
 
@@ -105,15 +105,15 @@ async def test_publish_and_subscribe_results(redis, transport):
 
 
 @pytest.mark.asyncio
-async def test_each_workflow_gets_its_own_result_group(redis, transport):
+async def test_each_workflow_gets_its_own_result_group(redis, rtransport):
     """subscribe_results() must create a unique consumer group per workflow."""
 
-    await transport.publish_result(make_result("X"))
+    await rtransport.publish_result(make_result("X"))
 
     received = []
 
     async def reader():
-        async for msg in transport.subscribe_results(wf_id="wfA"):
+        async for msg in rtransport.subscribe_results(wf_id="wfA"):
             received.append(msg)
             break
 
@@ -127,7 +127,7 @@ async def test_each_workflow_gets_its_own_result_group(redis, transport):
 
 
 @pytest.mark.asyncio
-async def test_invalid_message_in_results_is_skipped(redis, transport):
+async def test_invalid_message_in_results_is_skipped(redis, rtransport):
     # Insert a fake broken JSON into results stream
     await redis.xadd("results", {"json": "not-valid-json"})
 
@@ -135,9 +135,9 @@ async def test_invalid_message_in_results_is_skipped(redis, transport):
 
     async def reader():
         # publish a valid one after the invalid one
-        await transport.publish_result(make_result("good"))
+        await rtransport.publish_result(make_result("good"))
 
-        async for msg in transport.subscribe_results("wf2"):
+        async for msg in rtransport.subscribe_results("wf2"):
             received.append(msg)
             break  # stop after valid message
 
@@ -157,15 +157,15 @@ async def test_invalid_message_in_results_is_skipped(redis, transport):
     assert resp == []  # nothing left to consume
 
 @pytest.mark.asyncio
-async def test_invalid_message_in_tasks_is_skipped(redis, transport):
+async def test_invalid_message_in_tasks_is_skipped(redis, rtransport):
     await redis.xadd("tasks", {"json": "not-json"})
 
     received = []
 
     async def reader():
-        await transport.publish_task(make_task("ok"))
+        await rtransport.publish_task(make_task("ok"))
 
-        async for msg in transport.subscribe_tasks():
+        async for msg in rtransport.subscribe_tasks():
             received.append(msg)
             break
 
