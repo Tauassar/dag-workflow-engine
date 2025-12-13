@@ -14,5 +14,5 @@ class WorkflowEvent(pd.BaseModel):
     event_type: WorkflowEventType
     timestamp: float = pd.Field(default_factory=lambda: time.time())
     attempt: int
-    payload: dict[str, t.Any] | None = None  # node result or error
-    error: str | None = None  # node result or error
+    payload: dict[str, t.Any] = pd.Field(default_factory=dict)
+    error: str | None = None

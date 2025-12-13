@@ -6,16 +6,15 @@ import logging
 import time
 import uuid
 
-from dag_engine.core import DagOrchestrator, WorkflowWorker, WorkflowManager, WorkflowDefinition
+from dag_engine.core import WorkflowWorker, WorkflowManager, WorkflowDefinition
 from dag_engine.core.handlers import hregistry
-from dag_engine.core.manager import ManagerEventHandler
 from dag_engine.event_sourcing import WorkflowEvent
 from dag_engine.event_sourcing.bus import EventBus
-from dag_engine.store.events import RedisEventStore
+from dag_engine.event_sourcing.store import RedisEventStore
 from dag_engine.store.execution import RedisExecutionStore
 from dag_engine.store.idempotency import RedisIdempotencyStore
 from dag_engine.store.results import RedisResultStore
-from dag_engine.transport import InMemoryTransport, RedisTransport, TaskMessage
+from dag_engine.transport import TaskMessage
 from redis.asyncio import Redis
 
 from dag_engine.transport.consumer import RedisConsumer, RedisPublisher
@@ -58,7 +57,7 @@ class RedisWorkerConsumer:
 
 
 _redis = Redis(host="localhost", port=6379, decode_responses=True)
-_redis_orchestrator_consumer = RedisOrchestratorConsumer(RedisConsumer(_redis, _EVENTS_STREAM), EventBus(RedisPublisher(_redis, _EVENTS_STREAM)))
+_redis_orchestrator_consumer = RedisOrchestratorConsumer(RedisConsumer(_redis, _EVENTS_STREAM), EventBus(RedisPublisher(_redis, _EVENTS_STREAM), RedisEventStore(_redis),))
 _redis_worker_consumer1 = RedisWorkerConsumer(
     RedisConsumer(
         _redis,
@@ -70,7 +69,8 @@ _redis_worker_consumer1 = RedisWorkerConsumer(
         RedisPublisher(
             _redis,
             _EVENTS_STREAM,
-        )
+        ),
+        RedisEventStore(_redis),
     )
 )
 _redis_worker_consumer2 = RedisWorkerConsumer(
@@ -84,7 +84,8 @@ _redis_worker_consumer2 = RedisWorkerConsumer(
         RedisPublisher(
             _redis,
             _EVENTS_STREAM,
-        )
+        ),
+        RedisEventStore(_redis),
     )
 )
 
@@ -173,7 +174,6 @@ async def main():
         result_store=RedisResultStore(_redis),
         execution_store=RedisExecutionStore(_redis),
         idempotency_store=RedisIdempotencyStore(_redis),
-        event_store=RedisEventStore(_redis),
     )
     async def runner():
         await asyncio.sleep(1)

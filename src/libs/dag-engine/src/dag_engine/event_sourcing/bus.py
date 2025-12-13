@@ -7,7 +7,8 @@ from collections import defaultdict
 from .constants import WorkflowEventType
 from .schemas import WorkflowEvent
 from .handler import EventHandler
-from ..transport.consumer import RedisPublisher
+from dag_engine.transport.consumer import RedisPublisher
+from .store import EventStore
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,10 @@ class AbstractEventBus(abc.ABC):
 
 
 class EventBus(AbstractEventBus):
-    def __init__(self, publisher: RedisPublisher) -> None:
+    def __init__(self, publisher: RedisPublisher, event_store: EventStore | None = None) -> None:
         self._handlers: dict[WorkflowEventType, list[EventHandler]] = defaultdict(list)
         self.publisher = publisher
+        self.event_store = event_store
 
     def subscribe(
         self,
@@ -40,6 +42,8 @@ class EventBus(AbstractEventBus):
 
     async def publish(self, event: WorkflowEvent) -> None:
         await self.publisher.publish(event.model_dump_json())
+        if self.event_store:
+            await self.event_store.append(event)
 
     async def handle_event(self, event: WorkflowEvent) -> None:
         handlers = self._handlers.get(event.event_type, [])

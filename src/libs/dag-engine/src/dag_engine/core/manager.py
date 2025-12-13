@@ -14,7 +14,6 @@ from dag_engine.transport import ResultMessage, ResultType
 
 
 if t.TYPE_CHECKING:
-    from dag_engine.store.events import EventStore
     from dag_engine.store.execution import WorkflowExecutionStore
     from dag_engine.store.idempotency import IdempotencyStore
     from dag_engine.store.results import ResultStore
@@ -84,12 +83,10 @@ class WorkflowManager:
         result_store: ResultStore,
         execution_store: WorkflowExecutionStore,
         idempotency_store: IdempotencyStore,
-        event_store: EventStore | None = None,
     ):
         self.result_store = result_store
         self.execution_store = execution_store
         self.idempotency_store = idempotency_store
-        self.event_store = event_store
 
         self.workflows: dict[str, WorkflowInfo] = {}
         self._lock = asyncio.Lock()
@@ -172,7 +169,7 @@ class WorkflowManager:
             if workflow_id in self.workflows:
                 raise ValueError(f"Workflow {workflow_id} already exists")
 
-            dag = WorkflowDAG.from_definition(definition, workflow_id=workflow_id, event_store=self.event_store)
+            dag = WorkflowDAG.from_definition(definition, workflow_id=workflow_id, event_bus=self.event_bus)
 
             service = DagOrchestrator(
                 dag=dag,

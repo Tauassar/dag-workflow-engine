@@ -5,7 +5,7 @@ import time
 import typing as t
 from collections import deque
 
-from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
+from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType, EventBus
 
 from . import NodeStatus
 from .entities import DagNode
@@ -14,8 +14,6 @@ from .schemas import (
     WorkflowDefinition,
 )
 
-if t.TYPE_CHECKING:
-    from dag_engine.store.events import EventStore
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +23,9 @@ class WorkflowDAG:
         self,
         workflow_id: str,
         definition: WorkflowDefinition,
-        event_store: EventStore | None = None,
+        event_bus: EventBus | None = None,
     ) -> None:
-        self.event_store = event_store
+        self.event_bus = event_bus
 
         self.workflow_name = definition.name
         self.workflow_id = workflow_id
@@ -56,8 +54,8 @@ class WorkflowDAG:
         self._validate_acyclic()
 
     async def _emit_event(self, event: WorkflowEvent) -> None:
-        if self.event_store:
-            await self.event_store.append(event)
+        if self.event_bus:
+            await self.event_bus.publish(event)
 
     @property
     def nodes(self) -> dict[str, DagNode]:
