@@ -1,17 +1,12 @@
 import json
 import logging
 import typing as t
-import uuid
 
 from redis.asyncio import Redis
 
 from .protocols import Transport
 
 logger = logging.getLogger(__name__)
-
-
-PMessage = t.TypeVar("t")
-CMessage = t.TypeVar("t")
 
 
 class RedisPublisher(Transport):
@@ -39,7 +34,6 @@ class RedisPublisher(Transport):
         await self.redis.xadd(self._stream, {"json": result}, id="*")
 
 
-
 class RedisConsumer:
     """
     Redis Streams consumer.
@@ -64,7 +58,7 @@ class RedisConsumer:
         self.consumer_name = consumer_name
         self.block_ms = block_ms
 
-    async def init(self):
+    async def _init(self):
         # ensure streams and base groups exist
         # prefer xgroup_create with mkstream=True to ensure stream exists in both redis and fakeredis
         await self._ensure_consumer_group(self._stream, self._group)
@@ -76,7 +70,7 @@ class RedisConsumer:
             # group already exists
             pass
 
-    async def _destroy_consumer_group(self, stream: str, group: str):
+    async def destroy_consumer_group(self, stream: str, group: str):
         try:
             await self.redis.xgroup_destroy(name=stream, groupname=group)
         except Exception:
@@ -107,7 +101,7 @@ class RedisConsumer:
         """
         Each caller may create/read from a per-workflow consumer group.
         """
-        await self._ensure_consumer_group(self._stream, self._group)
+        await self._init()
 
         while True:
             resp = await self.redis.xreadgroup(
