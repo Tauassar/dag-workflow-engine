@@ -4,7 +4,7 @@ import time
 import typing as t
 
 from dag_engine.core import NodeStatus
-from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
+from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType, EventBus
 from dag_engine.store.idempotency import IdempotencyStore
 
 logger = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ class TimeoutMonitor:
         self,
         dag,
         idempotency_store: IdempotencyStore,
-        event_handler: t.Callable[[...], t.Awaitable[None]] | None = None,  # type: ignore[misc]
+        event_bus: EventBus,
         check_interval: float = 1.0,
         dispatch_retry_callback: t.Callable[[str], t.Any] | None = None,
     ):
@@ -34,7 +34,7 @@ class TimeoutMonitor:
         Args:
             dag: Shared WorkflowDAG instance.
             idempotency_store: Shared IdempotencyStore implementation.
-            event_handler: Orchestrator event emitter.
+            event_bus: event emitter.
             check_interval: Timeout polling frequency in seconds.
             dispatch_retry_callback:
                 async callback(node_id) -> None
@@ -43,7 +43,7 @@ class TimeoutMonitor:
         """
         self.dag = dag
         self.idempotency_store = idempotency_store
-        self.event_handler = event_handler
+        self.event_bus = event_bus
         self.check_interval = check_interval
         self.dispatch_retry_callback = dispatch_retry_callback
 
@@ -64,10 +64,10 @@ class TimeoutMonitor:
                 pass
 
     async def _emit_event(self, *args, **kwargs: t.Any):
-        if not self.event_handler:
+        if not self.event_bus:
             return
 
-        await self.event_handler(WorkflowEvent(*args, **kwargs))
+        await self.event_bus.publish(WorkflowEvent(*args, **kwargs))
 
     async def _run(self):
         try:

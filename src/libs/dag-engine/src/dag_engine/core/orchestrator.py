@@ -52,7 +52,7 @@ class DagOrchestrator:
         self.timeout_monitor = TimeoutMonitor(
             dag=self.dag,
             idempotency_store=self.idempotency_store,
-            event_handler=self._emit_event,
+            event_bus=self.event_bus,
             check_interval=timeout_check_interval,
             dispatch_retry_callback=self._dispatch_retry,
         )
