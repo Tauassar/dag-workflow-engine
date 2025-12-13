@@ -4,6 +4,7 @@ import asyncio
 import time
 import typing as t
 
+from .constants import WorkflowStatus
 from .orchestrator import DagOrchestrator
 from .workflow import WorkflowDAG
 
@@ -33,12 +34,12 @@ class WorkflowInfo:
         self.service = service
         self.created_at = time.time()
         self.completed_at: float | None = None
-        self.status: str = "RUNNING"
+        self.status: str = WorkflowStatus.RUNNING
         self.error: str | None = None
 
     @property
     def is_finished(self) -> bool:
-        return self.status in ("COMPLETED", "FAILED")
+        return self.status in (WorkflowStatus.COMPLETED, WorkflowStatus.FAILED)
 
 
 class WorkflowManager:
@@ -82,10 +83,10 @@ class WorkflowManager:
 
             summary = info.service.collect_results()
 
-            if any(v["status"] == "FAILED" for v in summary.values()):
-                info.status = "FAILED"
+            if any(v["status"] == WorkflowStatus.FAILED for v in summary.values()):
+                info.status = WorkflowStatus.FAILED
             else:
-                info.status = "COMPLETED"
+                info.status = WorkflowStatus.COMPLETED
 
             info.completed_at = time.time()
 
