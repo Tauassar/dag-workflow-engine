@@ -160,6 +160,8 @@ class WorkflowManager:
                 await self._on_workflow_complete(event.workflow_id)
                 logger.info(f"Workflow {event.workflow_id} completed")
                 await orchestrator.stop()
+            else:
+                logger.info(f"Workflow {event.workflow_id} execution continue")
 
     async def start_workflow(self, workflow_id: str, definition: WorkflowDefinition) -> WorkflowInfo:
         """

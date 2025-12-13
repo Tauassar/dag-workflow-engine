@@ -63,11 +63,11 @@ class TimeoutMonitor:
             except asyncio.CancelledError:
                 pass
 
-    async def _emit_event(self, *args, **kwargs: t.Any):
+    async def _emit_event(self, event: WorkflowEvent):
         if not self.event_bus:
             return
 
-        await self.event_bus.publish(WorkflowEvent(*args, **kwargs))
+        await self.event_bus.publish(event)
 
     async def _run(self):
         try:
@@ -114,12 +114,15 @@ class TimeoutMonitor:
                     # Mark as PENDING, increment attempt, and schedule retry
                     logger.warning(f"Retrying node {node.id}...")
                     await self._emit_event(
-                        workflow_id=self.dag.workflow_id,
-                        workflow_name=self.dag.workflow_name,
-                        node_id=node.id,
-                        event_type=WorkflowEventType.NODE_RETRY,
-                        attempt=node.attempt,
-                        payload={"error": "TIMEOUT"},
+                        WorkflowEvent(
+                            workflow_id=self.dag.workflow_id,
+                            workflow_name=self.dag.workflow_name,
+                            node_id=node.id,
+                            event_type=WorkflowEventType.NODE_RETRY,
+                            attempt=node.attempt,
+                            payload={"error": "TIMEOUT"},
+                            error="TIMEOUT",
+                        )
                     )
 
                     node.status = NodeStatus.PENDING
@@ -143,11 +146,14 @@ class TimeoutMonitor:
                     node.deadline_at = None
 
                     await self._emit_event(
-                        workflow_id=self.dag.workflow_id,
-                        workflow_name=self.dag.workflow_name,
-                        node_id=node.id,
-                        event_type=WorkflowEventType.NODE_FAILED,
-                        attempt=node.attempt,
-                        payload={"error": node.last_error},
+                        WorkflowEvent(
+                            workflow_id=self.dag.workflow_id,
+                            workflow_name=self.dag.workflow_name,
+                            node_id=node.id,
+                            event_type=WorkflowEventType.NODE_FAILED,
+                            attempt=node.attempt,
+                            payload={"detail": node.last_error},
+                            error=node.last_error,
+                        )
                     )
                     await self.dag.block_dependents(node.id)
