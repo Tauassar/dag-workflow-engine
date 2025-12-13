@@ -1,12 +1,17 @@
 import abc
-import typing as t
 
 from .schemas import WorkflowEvent
+from dag_engine.core.registry import BaseRegistry
 
-E = t.TypeVar("E", bound=WorkflowEvent)
 
-
-class EventHandler(t.Generic[E], abc.ABC):
+class EventHandler(abc.ABC):
     @abc.abstractmethod
-    async def handle(self, event: E) -> None:
+    async def handle(self, event: WorkflowEvent) -> None:
         ...
+
+
+class EventHandlerRegistry(BaseRegistry[EventHandler]):
+    ...
+
+
+eh_registry = EventHandlerRegistry()

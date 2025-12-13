@@ -1,21 +1,35 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import typing as t
 
 from .constants import WorkflowStatus
 from .orchestrator import DagOrchestrator
 from .workflow import WorkflowDAG
+from dag_engine.event_sourcing import WorkflowEvent, EventHandler, WorkflowEventType
+from ..event_sourcing.bus import EventBus
+from dag_engine.transport import ResultMessage, ResultType
+
 
 if t.TYPE_CHECKING:
     from dag_engine.store.events import EventStore
     from dag_engine.store.execution import WorkflowExecutionStore
     from dag_engine.store.idempotency import IdempotencyStore
     from dag_engine.store.results import ResultStore
-    from dag_engine.transport import Transport
 
     from .workflow import WorkflowDefinition
+
+
+logger = logging.getLogger(__name__)
+
+
+class EventHandler(EventHandler):
+    _manager: WorkflowManager
+
+    async def handle(self, event: WorkflowEvent) -> None:
+        await self._manager.on_node_complete(event)
 
 
 class WorkflowInfo:
@@ -42,6 +56,14 @@ class WorkflowInfo:
         return self.status in (WorkflowStatus.COMPLETED, WorkflowStatus.FAILED)
 
 
+class ManagerEventHandler(EventHandler):
+    def __init__(self, manager: WorkflowManager):
+        self.manager = manager
+
+    async def handle(self, event: WorkflowEvent) -> None:
+        await self.manager.on_node_complete(event)
+
+
 class WorkflowManager:
     """
     A top-level component that manages *multiple* concurrent workflows.
@@ -54,16 +76,16 @@ class WorkflowManager:
     - Track lifecycle events
     - Provide workflow queries
     """
+    _registry: t.Dict[str, DagOrchestrator] = {}
 
     def __init__(
         self,
-        transport: Transport,
+        event_bus: EventBus,
         result_store: ResultStore,
         execution_store: WorkflowExecutionStore,
         idempotency_store: IdempotencyStore,
         event_store: EventStore | None = None,
     ):
-        self.transport = transport
         self.result_store = result_store
         self.execution_store = execution_store
         self.idempotency_store = idempotency_store
@@ -71,6 +93,11 @@ class WorkflowManager:
 
         self.workflows: dict[str, WorkflowInfo] = {}
         self._lock = asyncio.Lock()
+
+        eh = ManagerEventHandler(self)
+        event_bus.subscribe(WorkflowEventType.NODE_COMPLETED, eh)
+        event_bus.subscribe(WorkflowEventType.NODE_FAILED, eh)
+        self.event_bus = event_bus
 
     async def _on_workflow_complete(self, workflow_id: str):
         """
@@ -103,6 +130,40 @@ class WorkflowManager:
             await self.execution_store.save_results(workflow_id, summary)
             self.workflows.pop(workflow_id, None)
 
+    async def on_node_complete(self, event: WorkflowEvent) -> None:
+        orchestrator = self._registry.get(event.workflow_id)
+        if orchestrator:
+            if event.event_type.NODE_COMPLETED:
+                msg = ResultMessage(
+                    workflow_name=event.workflow_name,
+                    workflow_id=event.workflow_id,
+                    node_id=event.node_id,
+                    attempt=event.attempt,
+                    type=ResultType.COMPLETED,
+                    payload=event.payload,
+                    error=None,
+                    timestamp=event.timestamp,
+                )
+            else:
+                msg = ResultMessage(
+                    workflow_name=event.workflow_name,
+                    workflow_id=event.workflow_id,
+                    node_id=event.node_id,
+                    attempt=event.attempt,
+                    type=ResultType.FAILED,
+                    payload=event.payload,
+                    error=event.error,
+                    timestamp=event.timestamp,
+                )
+
+            logger.info(f"Node {event.node_id} completed event received: %s", event)
+            await orchestrator.handle_result(msg)
+
+            if orchestrator.is_finished():
+                await self._on_workflow_complete(event.workflow_id)
+                logger.info(f"Workflow {event.workflow_id} completed")
+                await orchestrator.stop()
+
     async def start_workflow(self, workflow_id: str, definition: WorkflowDefinition) -> WorkflowInfo:
         """
         Starts a new workflow execution and registers it.
@@ -115,11 +176,9 @@ class WorkflowManager:
 
             service = DagOrchestrator(
                 dag=dag,
-                transport=self.transport,
                 result_store=self.result_store,
                 idempotency_store=self.idempotency_store,
-                event_store=self.event_store,
-                on_complete=self._on_workflow_complete,
+                event_bus=self.event_bus,
             )
 
             info = WorkflowInfo(
@@ -142,7 +201,7 @@ class WorkflowManager:
         )
 
         try:
-            await service.start()
+            self._registry[await service.start()] = service
         except Exception:
             await self._on_workflow_complete(workflow_id)
             raise

@@ -7,12 +7,12 @@ from collections import defaultdict
 from .constants import WorkflowEventType
 from .schemas import WorkflowEvent
 from .handler import EventHandler
-
+from ..transport.consumer import RedisPublisher
 
 logger = logging.getLogger(__name__)
 
 
-class EventBus(abc.ABC):
+class AbstractEventBus(abc.ABC):
     @abc.abstractmethod
     def subscribe(
         self,
@@ -25,24 +25,24 @@ class EventBus(abc.ABC):
     async def publish(self, event: WorkflowEvent) -> None:
         ...
 
-    @abc.abstractmethod
-    async def publish_many(self, events: list[WorkflowEvent]) -> None:
-        ...
 
-
-class InMemoryEventBus(EventBus):
-    def __init__(self) -> None:
-        self._handlers: dict[type[WorkflowEventType], list[EventHandler]] = defaultdict(list)
+class EventBus(AbstractEventBus):
+    def __init__(self, publisher: RedisPublisher) -> None:
+        self._handlers: dict[WorkflowEventType, list[EventHandler]] = defaultdict(list)
+        self.publisher = publisher
 
     def subscribe(
         self,
-        event_type: type[WorkflowEventType],
+        event_type: WorkflowEventType,
         handler: EventHandler,
     ) -> None:
         self._handlers[event_type].append(handler)
 
     async def publish(self, event: WorkflowEvent) -> None:
-        handlers = self._handlers.get(type(event.event_type), [])
+        await self.publisher.publish(event.model_dump_json())
+
+    async def handle_event(self, event: WorkflowEvent) -> None:
+        handlers = self._handlers.get(event.event_type, [])
 
         if not handlers:
             return
@@ -55,12 +55,8 @@ class InMemoryEventBus(EventBus):
         # fire-and-forget but still awaited for lifecycle control
         await asyncio.gather(*tasks)
 
-    async def publish_many(self, events: list[WorkflowEvent]) -> None:
-        for event in events:
-            await self.publish(event)
-
+    @staticmethod
     async def _safe_handle(
-        self,
         handler: EventHandler,
         event: WorkflowEvent,
     ) -> None:
@@ -69,6 +65,5 @@ class InMemoryEventBus(EventBus):
         except Exception as exc:
             logger.warning(
                 f"[EventBus] handler={handler.__class__.__name__} "
-                f"event={type(event).__name__} error={exc}"
+                f"event={type(event).__name__} error={exc}", exc_info=True
             )
-

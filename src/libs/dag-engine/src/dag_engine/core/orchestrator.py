@@ -15,6 +15,7 @@ from .exceptions import MissingDependencyError, TemplateResolutionError
 from .templates import TemplateResolver
 from .timeout_monitor import TimeoutMonitor
 from .workflow import WorkflowDAG
+from ..event_sourcing.bus import EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -33,25 +34,21 @@ class DagOrchestrator:
     def __init__(
         self,
         dag: WorkflowDAG,
-        transport: Transport,
         idempotency_store: IdempotencyStore,
-        event_store: EventStore | None = None,
+        event_bus: EventBus,
         result_store: ResultStore | None = None,
         idempotency_ttl_seconds: int | None = None,
         result_ttl_seconds: int | None = None,
         controller_id: str = "dag-service",
         timeout_check_interval=1.0,
-        on_complete: t.Callable[[str], t.Awaitable[None]] | None = None,
     ):
         self.dag = dag
-        self.transport = transport
         self.idempotency_store = idempotency_store
         self.idempotency_ttl_seconds = idempotency_ttl_seconds
-        self.event_store = event_store
+        self.event_bus = event_bus
         self.result_store = result_store
         self.result_ttl = result_ttl_seconds
         self.controller_id = controller_id
-        self.on_complete = on_complete
 
         self.timeout_monitor = TimeoutMonitor(
             dag=self.dag,
@@ -63,12 +60,11 @@ class DagOrchestrator:
 
         self._lock = asyncio.Lock()
         self._result_task: asyncio.Task | None = None
-        self._stop: bool = False
 
         # template resolver uses an async result provider
         self.template_resolver = TemplateResolver(result_provider=self._async_read_node_result_value)
 
-    def _is_finished(self) -> bool:
+    def is_finished(self) -> bool:
         """
         Workflow is terminal if all nodes are in SUCCESS, FAILED, or BLOCKED.
         """
@@ -89,8 +85,7 @@ class DagOrchestrator:
         return self.dag.nodes[node_id].result
 
     async def _emit_event(self, event: WorkflowEvent) -> None:
-        if self.event_store:
-            await self.event_store.append(event)
+        await self.event_bus.publish(event)
 
     async def already_processed(self, node: DagNode) -> bool:
         dispatch_key = f"dispatch:{self.dag.workflow_id}:{node.id}:{node.attempt}"
@@ -131,22 +126,15 @@ class DagOrchestrator:
 
         await self._emit_event(
             WorkflowEvent(
+                event_type=WorkflowEventType.NODE_STARTED,
                 workflow_id=self.dag.workflow_id,
                 workflow_name=self.dag.workflow_name,
                 node_id=node.id,
-                event_type=WorkflowEventType.NODE_STARTED,
+                node_type=node.type,
                 attempt=node.attempt,
+                payload=resolved_config,
             )
         )
-        task = TaskMessage(
-            workflow_id=self.dag.workflow_id,
-            workflow_name=self.dag.workflow_name,
-            node_id=node.id,
-            node_type=node.type,
-            attempt=node.attempt,
-            config=resolved_config,
-        )
-        await self.transport.publish_task(task)
 
     async def _dispatch_retry(self, node_id: str):
         """
@@ -161,7 +149,7 @@ class DagOrchestrator:
 
         await self._publish_task(node)
 
-    async def start(self) -> None:
+    async def start(self) -> str:
         """
         Seeds all root nodes (no dependencies) by publishing TaskMessage.
         Starts background result-processing loop.
@@ -172,27 +160,10 @@ class DagOrchestrator:
                     await self._publish_task(node)
 
         # Start asynchronous loop for results
-        self._result_task = asyncio.create_task(self._result_loop())
         await self.timeout_monitor.start()
+        return self.dag.workflow_id
 
-    async def _result_loop(self) -> None:
-        async for result in t.cast(
-            t.AsyncIterator[ResultMessage], self.transport.subscribe_results(wf_id=self.dag.workflow_id)
-        ):
-            if self._stop:
-                break
-
-            await self._handle_result(result)
-
-    async def _check_complete(self):
-        # check completion
-        if self._is_finished():
-            if self.on_complete:
-                await self.on_complete(self.dag.workflow_id)
-
-            await self.stop()
-
-    async def _handle_result(self, res: ResultMessage) -> None:
+    async def handle_result(self, res: ResultMessage) -> None:
         if res.workflow_id != self.dag.workflow_id:
             # Ignore results belonging to a different workflow
             logger.debug(
@@ -220,8 +191,6 @@ class DagOrchestrator:
                 await self._handle_success(node_id=res.node_id, res=res)
             else:
                 await self._handle_failure(node_id=res.node_id, res=res)
-
-            await self._check_complete()
 
     async def _handle_success(self, node_id: str, res: ResultMessage) -> None:
         node = self.dag.nodes[node_id]
@@ -254,17 +223,6 @@ class DagOrchestrator:
         node.status = NodeStatus.COMPLETED
         node.result = loaded_result
         node.finished_at = res.timestamp
-
-        await self._emit_event(
-            WorkflowEvent(
-                workflow_id=res.workflow_id,
-                workflow_name=self.dag.workflow_name,
-                node_id=node_id,
-                event_type=WorkflowEventType.NODE_COMPLETED,
-                attempt=res.attempt,
-                payload={"result": "stored" if "result_key" in (payload or {}) else loaded_result},
-            )
-        )
 
         # Schedule dependents
         for dep_id in node.dependents:
@@ -316,18 +274,6 @@ class DagOrchestrator:
         node.last_error = res.error
         node.finished_at = res.timestamp
 
-        await self._emit_event(
-            WorkflowEvent(
-                workflow_id=res.workflow_id,
-                workflow_name=self.dag.workflow_name,
-                node_id=node_id,
-                event_type=WorkflowEventType.NODE_FAILED,
-                attempt=res.attempt,
-                payload={"error": res.error},
-            )
-        )
-        await self._check_complete()
-
     async def _retry_later(self, node_id: str, delay: float) -> None:
         await asyncio.sleep(delay)
 
@@ -370,18 +316,6 @@ class DagOrchestrator:
         Stop the DagOrchestrator's background result loop.
         For RedisTransport, this is triggered by closing result stream.
         """
-        self._stop = True
-        if hasattr(self.transport, "close_results"):
-            await self.transport.close_results()
-
-        if self._result_task:
-            self._result_task.cancel()
-
-        if hasattr(self.transport, "_destroy_consumer_group"):
-            await self.transport._destroy_consumer_group(
-                stream=self.transport.results_stream, group=self.transport.result_group + self.dag.workflow_id  # type: ignore[attr-defined]
-            )
-
         await self.timeout_monitor.stop()
 
     def collect_results(self) -> dict[str, t.Any]:

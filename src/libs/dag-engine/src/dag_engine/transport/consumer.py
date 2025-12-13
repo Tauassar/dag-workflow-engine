@@ -14,7 +14,7 @@ PMessage = t.TypeVar("t")
 CMessage = t.TypeVar("t")
 
 
-class RedisTransport(Transport):
+class RedisPublisher(Transport):
     """
     Redis Streams publisher.
 
@@ -35,7 +35,7 @@ class RedisTransport(Transport):
         self.block_ms = block_ms
 
     async def publish(self, result: str) -> None:
-        logger.debug("Publishing result: %s", {"json": result})
+        logger.debug("Publishing message: %s to %s", {"json": result}, self._stream)
         await self.redis.xadd(self._stream, {"json": result}, id="*")
 
 
@@ -103,18 +103,16 @@ class RedisConsumer:
                 return v
         return None
 
-    async def subscribe_results(self) -> t.AsyncIterator[dict]:
+    async def subscribe(self) -> t.AsyncIterator[dict]:
         """
         Each caller may create/read from a per-workflow consumer group.
         """
         await self._ensure_consumer_group(self._stream, self._group)
 
-        consumer_name = f"{self.consumer_name}-{uuid.uuid4()}"
-
         while True:
             resp = await self.redis.xreadgroup(
                 groupname=self._group,
-                consumername=consumer_name,
+                consumername=self.consumer_name,
                 streams={self._stream: ">"},
                 count=1,
                 block=self.block_ms,
