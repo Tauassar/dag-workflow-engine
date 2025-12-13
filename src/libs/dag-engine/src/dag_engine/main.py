@@ -7,7 +7,7 @@ import time
 import uuid
 
 from dag_engine.core import WorkflowWorker, WorkflowManager, WorkflowDefinition
-from dag_engine.core.handlers import hregistry
+from dag_engine.core import hregistry
 from dag_engine.event_sourcing import WorkflowEvent
 from dag_engine.event_sourcing.bus import EventBus
 from dag_engine.event_sourcing.store import RedisEventStore

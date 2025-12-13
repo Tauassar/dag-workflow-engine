@@ -3,7 +3,7 @@ import pytest
 
 from dag_engine.transport.messages import TaskMessage, ResultMessage, ResultType
 
-from dag_engine.core.handlers import HandlerRegistry
+from dag_engine.core import HandlerRegistry
 from dag_engine.core.worker import WorkflowWorker
 
 

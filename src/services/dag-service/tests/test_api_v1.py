@@ -6,7 +6,7 @@ from http import HTTPStatus
 from fastapi.testclient import TestClient
 
 from dag_engine.core import DagValidationError
-from dag_engine.core.handlers import hregistry
+from dag_engine.core import hregistry
 
 
 def make_valid_definition():

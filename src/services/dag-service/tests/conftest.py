@@ -12,7 +12,7 @@ from httpx import AsyncClient, ASGITransport
 from dag_service.routes.v1 import v1_router, get_container as get_container_dep, get_manager as get_manager_dep
 from dag_engine.core.orchestrator import DagOrchestrator
 from dag_engine.core.manager import WorkflowManager
-from dag_engine.core.handlers import hregistry
+from dag_engine.core import hregistry
 from dag_engine.transport.local import InMemoryTransport
 from dag_engine.transport.messages import TaskMessage, ResultMessage, ResultType
 

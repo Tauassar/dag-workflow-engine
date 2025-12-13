@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from dag_engine.core.handlers import HandlerRegistry, hregistry
+from dag_engine.core import HandlerRegistry, hregistry
 from dag_engine.transport import TaskMessage
 
 

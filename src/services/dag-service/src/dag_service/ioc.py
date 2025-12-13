@@ -2,7 +2,7 @@ import logging
 import uuid
 
 from dag_engine.core import WorkflowWorker
-from dag_engine.core.handlers import hregistry
+from dag_engine.core import hregistry
 from dag_engine.core.manager import WorkflowManager
 from dag_engine.store.events import RedisEventStore
 from dag_engine.store.execution import RedisExecutionStore

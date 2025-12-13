@@ -1,12 +1,17 @@
 import traceback
+import asyncio
 import typing as t
 
 from dag_engine.store.idempotency import IdempotencyStore
 from dag_engine.store.results import ResultStore
+
 from dag_engine.transport import TaskMessage
 
-from .handlers import Handler
-from ..event_sourcing import EventBus, WorkflowEvent, WorkflowEventType, EventHandler
+from dag_engine.event_sourcing import EventBus, WorkflowEvent, WorkflowEventType, EventHandler
+from .registry import BaseRegistry
+
+
+Handler = t.Callable[[TaskMessage], t.Awaitable[t.Any]]
 
 
 class WorkerEventHandler(EventHandler):
@@ -25,6 +30,16 @@ class WorkerEventHandler(EventHandler):
                 timestamp=event.timestamp,
             )
         )
+
+
+class HandlerRegistry(BaseRegistry[Handler]):
+    def _register_handler(self, node_type: str, handler: Handler) -> None:
+        if not asyncio.iscoroutinefunction(handler):
+            raise ValueError("handler must be async")
+        super()._register_handler(node_type, handler)
+
+
+hregistry = HandlerRegistry()
 
 
 class WorkflowWorker:
