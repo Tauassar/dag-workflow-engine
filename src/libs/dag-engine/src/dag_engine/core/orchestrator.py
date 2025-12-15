@@ -270,31 +270,6 @@ class DagOrchestrator:
             ):
                 await self._publish_task(node)
 
-    async def wait_until_finished(self, poll_interval: float = 0.05) -> None:
-        """
-        Returns when all nodes are:
-            COMPLETED,
-            FAILED,
-            or permanently BLOCKED by failed dependencies.
-        """
-        while True:
-            async with self._lock:
-                done = True
-                for node in self.dag.nodes.values():
-                    if node.status in (NodeStatus.COMPLETED, NodeStatus.FAILED):
-                        continue
-                    if node.status == NodeStatus.PENDING and any(
-                        self.dag.nodes[d].status == NodeStatus.FAILED for d in node.depends_on
-                    ):
-                        continue
-                    done = False
-                    break
-
-            if done:
-                return
-
-            await asyncio.sleep(poll_interval)
-
     async def stop(self) -> None:
         """
         Stop the DagOrchestrator's background result loop.
