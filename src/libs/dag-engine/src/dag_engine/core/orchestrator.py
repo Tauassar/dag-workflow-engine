@@ -15,7 +15,6 @@ from .exceptions import MissingDependencyError, TemplateResolutionError
 from .templates import TemplateResolver
 from .workflow import WorkflowDAG
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -38,8 +37,6 @@ class DagOrchestrator:
         result_store: ResultStore | None = None,
         idempotency_ttl_seconds: int | None = None,
         result_ttl_seconds: int | None = None,
-        controller_id: str = "dag-service",
-        timeout_check_interval=1.0,
     ):
         self.dag = dag
         self.idempotency_store = idempotency_store
@@ -47,7 +44,6 @@ class DagOrchestrator:
         self.event_bus = event_bus
         self.result_store = result_store
         self.result_ttl = result_ttl_seconds
-        self.controller_id = controller_id
 
         self._lock = asyncio.Lock()
         self._result_task: asyncio.Task | None = None
