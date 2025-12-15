@@ -8,6 +8,7 @@ import uuid
 
 from dag_engine.core import WorkflowWorker, WorkflowManager, WorkflowDefinition
 from dag_engine.core import hregistry
+from dag_engine.core.timeout_monitor import GlobalTimeoutMonitor
 from dag_engine.event_sourcing import WorkflowEvent
 from dag_engine.event_sourcing.bus import EventBus
 from dag_engine.event_sourcing.store import RedisEventStore
@@ -96,6 +97,7 @@ USER_JSON = """{
       {
         "id": "input",
         "handler": "input",
+        "timeout_seconds": 1,
         "dependencies": []
       },
       {
@@ -175,6 +177,11 @@ async def main():
         execution_store=RedisExecutionStore(_redis),
         idempotency_store=RedisIdempotencyStore(_redis),
     )
+    monitor = GlobalTimeoutMonitor(
+        idempotency_store=idemp_store,
+        event_bus=_redis_orchestrator_consumer.event_bus,
+    )
+
     async def runner():
         await asyncio.sleep(1)
         await manager.start_workflow(str(uuid.uuid4()), WorkflowDefinition.model_validate(json.loads(USER_JSON), by_alias=True))
@@ -191,6 +198,7 @@ async def main():
     await asyncio.gather(
         _redis_orchestrator_consumer.consume(),
         runner(),
+        monitor.start(),
         _redis_worker_consumer1.consume(),
         _redis_worker_consumer2.consume(),
     )

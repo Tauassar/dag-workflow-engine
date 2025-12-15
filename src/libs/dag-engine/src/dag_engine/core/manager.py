@@ -94,6 +94,7 @@ class WorkflowManager:
         eh = ManagerEventHandler(self)
         event_bus.subscribe(WorkflowEventType.NODE_COMPLETED, eh)
         event_bus.subscribe(WorkflowEventType.NODE_FAILED, eh)
+        event_bus.subscribe(WorkflowEventType.NODE_TIMEOUT, eh)
         self.event_bus = event_bus
 
     async def _on_workflow_complete(self, workflow_id: str):
@@ -130,7 +131,7 @@ class WorkflowManager:
     async def on_node_complete(self, event: WorkflowEvent) -> None:
         orchestrator = self._registry.get(event.workflow_id)
         if orchestrator:
-            if event.event_type.NODE_COMPLETED:
+            if event.event_type == WorkflowEventType.NODE_COMPLETED:
                 msg = ResultMessage(
                     workflow_name=event.workflow_name,
                     workflow_id=event.workflow_id,

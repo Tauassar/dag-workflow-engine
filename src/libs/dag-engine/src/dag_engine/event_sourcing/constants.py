@@ -7,3 +7,4 @@ class WorkflowEventType(enum.StrEnum):
     NODE_BLOCKED = "NODE_BLOCKED"
     NODE_FAILED = "NODE_FAILED"
     NODE_RETRY = "NODE_RETRY"
+    NODE_TIMEOUT = "NODE_TIMEOUT"

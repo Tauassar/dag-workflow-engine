@@ -4,6 +4,7 @@ import time
 import typing as t
 
 from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
+from dag_engine.event_sourcing.bus import EventBus
 from dag_engine.store.idempotency import IdempotencyStore
 from dag_engine.store.results import ResultStore
 from dag_engine.transport import ResultMessage, ResultType
@@ -12,9 +13,8 @@ from .constants import NodeStatus
 from .entities import DagNode
 from .exceptions import MissingDependencyError, TemplateResolutionError
 from .templates import TemplateResolver
-from .timeout_monitor import TimeoutMonitor
 from .workflow import WorkflowDAG
-from ..event_sourcing.bus import EventBus
+
 
 logger = logging.getLogger(__name__)
 
@@ -48,14 +48,6 @@ class DagOrchestrator:
         self.result_store = result_store
         self.result_ttl = result_ttl_seconds
         self.controller_id = controller_id
-
-        self.timeout_monitor = TimeoutMonitor(
-            dag=self.dag,
-            idempotency_store=self.idempotency_store,
-            event_bus=self.event_bus,
-            check_interval=timeout_check_interval,
-            dispatch_retry_callback=self._dispatch_retry,
-        )
 
         self._lock = asyncio.Lock()
         self._result_task: asyncio.Task | None = None
@@ -131,6 +123,7 @@ class DagOrchestrator:
                 node_id=node.id,
                 node_type=node.type,
                 attempt=node.attempt,
+                expire_at=node.deadline_at,
                 payload=resolved_config,
             )
         )
@@ -159,7 +152,6 @@ class DagOrchestrator:
                     await self._publish_task(node)
 
         # Start asynchronous loop for results
-        await self.timeout_monitor.start()
         return self.dag.workflow_id
 
     async def handle_result(self, res: ResultMessage) -> None:
@@ -175,7 +167,7 @@ class DagOrchestrator:
             # Orchestrator correctly triggers child node exactly once
             node = self.dag.nodes.get(res.node_id)
             if node is None or node.status != NodeStatus.RUNNING:
-                logger.debug(f"Failed node {res.node_id} received result {res.payload}, discarding it")
+                logger.info(f"Failed node {res.node_id} received result {res.payload}, discarding it")
                 return
 
             # Ignore stale results: attempt mismatch (stale response)
@@ -184,11 +176,17 @@ class DagOrchestrator:
                 logger.debug(f"Node {res.node_id}, received stale result {res.payload}")
                 return
 
-            logger.debug(f"Received result for node {res.node_id}, attempt {res.attempt}, node attempt {node.attempt}")
+            logger.debug(f"Received result for node {res.node_id}:{res.workflow_id}, attempt {res.attempt}, node attempt {node.attempt}")
 
             if res.type == ResultType.COMPLETED:
+                logger.info(
+                    f"Node {res.node_id}:{res.workflow_id} completed successfully"
+                )
                 await self._handle_success(node_id=res.node_id, res=res)
             else:
+                logger.info(
+                    f"Node {res.node_id}:{res.workflow_id} failed"
+                )
                 await self._handle_failure(node_id=res.node_id, res=res)
 
     async def _handle_success(self, node_id: str, res: ResultMessage) -> None:
@@ -315,7 +313,7 @@ class DagOrchestrator:
         Stop the DagOrchestrator's background result loop.
         For RedisTransport, this is triggered by closing result stream.
         """
-        await self.timeout_monitor.stop()
+        ...
 
     def collect_results(self) -> dict[str, t.Any]:
         results = {}
