@@ -128,19 +128,6 @@ class DagOrchestrator:
             )
         )
 
-    async def _dispatch_retry(self, node_id: str):
-        """
-        Called by TimeoutMonitor when a retry attempt must be dispatched.
-        """
-        node = self.dag.nodes[node_id]
-
-        # Check dependencies still valid
-        if not all(self.dag.nodes[d].status == NodeStatus.COMPLETED for d in node.depends_on):
-            await self._check_complete()
-            return  # node now blocked or invalid
-
-        await self._publish_task(node)
-
     async def start(self) -> str:
         """
         Seeds all root nodes (no dependencies) by publishing TaskMessage.
