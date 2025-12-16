@@ -71,8 +71,6 @@ class WorkflowManager:
     - Provide workflow queries
     """
 
-    _registry: t.Dict[str, EventDrivenDagOrchestrator] = {}
-
     def __init__(
         self,
         event_bus: EventBus,
@@ -197,7 +195,7 @@ class WorkflowManager:
         )
 
         try:
-            self._registry[await service.start()] = service
+            await service.start()
         except Exception:
             await self._on_workflow_complete(workflow_id)
             raise
