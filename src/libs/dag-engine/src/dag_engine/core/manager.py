@@ -6,7 +6,7 @@ import time
 import typing as t
 
 from .constants import WorkflowStatus
-from .orchestrator import DagOrchestrator
+from .orchestrator import EventDrivenDagOrchestrator
 from .workflow import WorkflowDAG
 from dag_engine.event_sourcing import WorkflowEvent, EventHandler, WorkflowEventType
 from ..event_sourcing.bus import EventBus
@@ -40,7 +40,7 @@ class WorkflowInfo:
         self,
         workflow_id: str,
         dag: WorkflowDAG,
-        service: DagOrchestrator,
+        service: EventDrivenDagOrchestrator,
     ):
         self.workflow_id = workflow_id
         self.dag = dag
@@ -75,7 +75,7 @@ class WorkflowManager:
     - Track lifecycle events
     - Provide workflow queries
     """
-    _registry: t.Dict[str, DagOrchestrator] = {}
+    _registry: t.Dict[str, EventDrivenDagOrchestrator] = {}
 
     def __init__(
         self,
@@ -174,7 +174,7 @@ class WorkflowManager:
 
             dag = WorkflowDAG.from_definition(definition, workflow_id=workflow_id, event_bus=self.event_bus)
 
-            service = DagOrchestrator(
+            service = EventDrivenDagOrchestrator(
                 dag=dag,
                 result_store=self.result_store,
                 idempotency_store=self.idempotency_store,

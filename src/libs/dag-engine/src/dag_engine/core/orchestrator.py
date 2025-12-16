@@ -293,3 +293,287 @@ class DagOrchestrator:
                 results[node_id] = {"status": node.status.value}
 
         return results
+
+
+class EventDrivenDagOrchestrator:
+    """
+    DagOrchestrator:
+        - Owns and mutates the WorkflowDAG state
+        - Listens for ResultMessage from workers via Transport
+        - Publishes TaskMessage for runnable nodes
+        - Handles retries, backoff, and scheduling
+        - Emits events to EventStore
+        - Persists node results to ResultStore
+    """
+
+    def __init__(
+        self,
+        dag: WorkflowDAG,
+        idempotency_store: IdempotencyStore,
+        event_bus: EventBus,
+        result_store: ResultStore | None = None,
+        idempotency_ttl_seconds: int | None = None,
+        result_ttl_seconds: int | None = None,
+    ):
+        self.dag = dag
+        self.idempotency_store = idempotency_store
+        self.idempotency_ttl_seconds = idempotency_ttl_seconds
+        self.event_bus = event_bus
+        self.result_store = result_store
+        self.result_ttl = result_ttl_seconds
+
+        self._lock = asyncio.Lock()
+        self._result_task: asyncio.Task | None = None
+
+        # template resolver uses an async result provider
+        self.template_resolver = TemplateResolver(result_provider=self._async_read_node_result_value)
+
+    def is_finished(self) -> bool:
+        """
+        Workflow is terminal if all nodes are in SUCCESS, FAILED, or BLOCKED.
+        """
+        for node in self.dag.nodes.values():
+            if node.status in (NodeStatus.RUNNING, NodeStatus.PENDING):
+                failed_parents = [p for p in node.depends_on if self.dag.nodes[p].status == NodeStatus.FAILED]
+                if failed_parents:
+                    node.status = NodeStatus.FAILED
+                    node.blocked_by = failed_parents
+                else:
+                    return False
+        return True
+
+    async def _async_read_node_result_value(self, workflow_id: str, node_id: str) -> t.Any:
+        if self.result_store:
+            stored = await self.result_store.get_result(workflow_id, node_id)
+            return stored["result"] if stored else None
+        return self.dag.nodes[node_id].result
+
+    async def _emit_event(self, event: WorkflowEvent) -> None:
+        await self.event_bus.publish(event)
+
+    async def already_processed(self, node: DagNode) -> bool:
+        dispatch_key = f"dispatch:{self.dag.workflow_id}:{node.id}:{node.attempt}"
+        ok = await self.idempotency_store.set_if_absent(dispatch_key, ttl_seconds=self.idempotency_ttl_seconds)
+        if not ok:
+            return True
+        return False
+
+    async def _publish_task(self, node: DagNode) -> None:
+        if await self.already_processed(node):
+            return
+
+        node.attempt += 1
+
+        try:
+            resolved_config = await self.template_resolver.resolve(self.dag.workflow_id, node.config)
+        except (MissingDependencyError, TemplateResolutionError) as e:
+            logger.error(f"Failed to resolve template, finishing execution: {e}", exc_info=True)
+            node.status = NodeStatus.FAILED
+            node.last_error = e
+            node.finished_at = time.time()
+            await self._emit_event(
+                WorkflowEvent(
+                    workflow_id=self.dag.workflow_id,
+                    workflow_name=self.dag.workflow_name,
+                    node_id=node.id,
+                    event_type=WorkflowEventType.NODE_FAILED,
+                    attempt=node.attempt,
+                    payload={"error": e},
+                )
+            )
+            await self.stop()
+            raise
+
+        node.status = NodeStatus.RUNNING
+        node.started_at = time.time()
+        node.deadline_at = node.started_at + node.timeout_seconds if node.timeout_seconds else None
+
+        await self._emit_event(
+            WorkflowEvent(
+                event_type=WorkflowEventType.NODE_STARTED,
+                workflow_id=self.dag.workflow_id,
+                workflow_name=self.dag.workflow_name,
+                node_id=node.id,
+                node_type=node.type,
+                attempt=node.attempt,
+                expire_at=node.deadline_at,
+                payload=resolved_config,
+            )
+        )
+
+    async def start(self) -> str:
+        """
+        Seeds all root nodes (no dependencies) by publishing TaskMessage.
+        Starts background result-processing loop.
+        """
+        async with self._lock:
+            for _, node in self.dag.nodes.items():
+                if not node.depends_on and node.status == NodeStatus.PENDING:
+                    await self._publish_task(node)
+
+        # Start asynchronous loop for results
+        return self.dag.workflow_id
+
+    async def handle_result(self, res: ResultMessage) -> None:
+        if res.workflow_id != self.dag.workflow_id:
+            # Ignore results belonging to a different workflow
+            logger.debug(
+                f"Received result for workflow {self.dag.workflow_id}, but looking for {self.dag.workflow_id}, discarding it"
+            )
+            return
+
+        async with self._lock:
+            # Omit (Race Conditions): Ensure that if multiple parent nodes finish at the exact same millisecond, the
+            # Orchestrator correctly triggers child node exactly once
+            node = self.dag.nodes.get(res.node_id)
+            if node is None or node.status != NodeStatus.RUNNING:
+                logger.info(f"Failed node {res.node_id} received result {res.payload}, discarding it")
+                return
+
+            # Ignore stale results: attempt mismatch (stale response)
+            if res.attempt != node.attempt:
+                # ignore stale/late result
+                logger.debug(f"Node {res.node_id}, received stale result {res.payload}")
+                return
+
+            logger.debug(f"Received result for node {res.node_id}:{res.workflow_id}, attempt {res.attempt}, node attempt {node.attempt}")
+
+            if res.type == ResultType.COMPLETED:
+                logger.info(
+                    f"Node {res.node_id}:{res.workflow_id} completed successfully"
+                )
+                await self._handle_success(res=res)
+            else:
+                logger.info(
+                    f"Node {res.node_id}:{res.workflow_id} failed"
+                )
+                await self._handle_failure(res=res)
+
+    async def apply_result(self, res: ResultMessage) -> dict[str, t.Any] | None:
+        node = self.dag.nodes[res.node_id]
+
+        if res.type == ResultType.COMPLETED:
+            node = self.dag.nodes[res.node_id]
+            node.status = NodeStatus.COMPLETED
+            payload = res.payload
+            loaded_result = None
+
+            if isinstance(payload, dict) and "result_key" in payload:
+                # Worker stored result in persistent storage, so we fetch it
+                if self.result_store:
+                    stored = await self.result_store.get_result(res.workflow_id, res.node_id)
+                    if stored:
+                        loaded_result = stored["result"]
+            else:
+                loaded_result = payload
+
+            node.result = loaded_result
+            node.finished_at = res.timestamp
+            return loaded_result
+        else:
+            # Check retry policy
+            retry_policy = node.retry_policy
+            if retry_policy and node.attempt < retry_policy.max_attempts:
+                node.status = NodeStatus.PENDING
+                node.last_error = res.error
+            else:
+                await self.dag.block_dependents(node.id)
+                node.status = NodeStatus.FAILED
+                node.last_error = res.error
+                node.finished_at = res.timestamp
+
+            return {"error": res.error}
+
+    async def _handle_success(self, res: ResultMessage) -> None:
+        result = await self.apply_result(res)
+        if self.result_store:
+            await self.result_store.save_result(
+                workflow_id=res.workflow_id,
+                node_id=res.node_id,
+                attempt=res.attempt,
+                result=result,
+                ttl_seconds=self.result_ttl,
+            )
+
+        node = self.dag.nodes[res.node_id]
+        # Schedule dependents
+        for dep_id in node.dependents:
+            dep = self.dag.nodes[dep_id]
+            if dep.status == NodeStatus.PENDING and all(
+                self.dag.nodes[d].status == NodeStatus.COMPLETED for d in dep.depends_on
+            ):
+                await self._publish_task(dep)
+
+    async def _handle_failure(self, res: ResultMessage) -> None:
+        result = await self.apply_result(res)
+        if self.result_store:
+            await self.result_store.save_result(
+                workflow_id=res.workflow_id,
+                node_id=res.node_id,
+                attempt=res.attempt,
+                result=result,
+                ttl_seconds=self.result_ttl,
+            )
+
+        node = self.dag.nodes[res.node_id]
+        # Check retry policy
+        retry_policy = node.retry_policy
+        if retry_policy and node.attempt < retry_policy.max_attempts:
+            await self._emit_event(
+                WorkflowEvent(
+                    workflow_id=res.workflow_id,
+                    workflow_name=self.dag.workflow_name,
+                    node_id=res.node_id,
+                    event_type=WorkflowEventType.NODE_RETRY,
+                    attempt=res.attempt,
+                    payload={"error": res.error},
+                )
+            )
+
+            backoff = retry_policy.backoff_for_attempt(node.attempt)
+
+            node.status = NodeStatus.PENDING
+            node.last_error = res.error
+
+            # Schedule retry in background
+            asyncio.create_task(self._retry_later(res.node_id, backoff))
+
+    async def _retry_later(self, node_id: str, delay: float) -> None:
+        await asyncio.sleep(delay)
+
+        async with self._lock:
+            node = self.dag.nodes[node_id]
+
+            # Retry only if dependencies still satisfied and node still pending
+            if node.status == NodeStatus.PENDING and all(
+                self.dag.nodes[d].status == NodeStatus.COMPLETED for d in node.depends_on
+            ):
+                await self._publish_task(node)
+
+    async def stop(self) -> None:
+        """
+        Stop the DagOrchestrator's background result loop.
+        For RedisTransport, this is triggered by closing result stream.
+        """
+        ...
+
+    def collect_results(self) -> dict[str, t.Any]:
+        results = {}
+
+        for node_id, node in self.dag.nodes.items():
+            if node.status == NodeStatus.COMPLETED:
+                results[node_id] = {
+                    "status": "COMPLETED",
+                    "result": node.result,
+                    "attempt": node.attempt,
+                }
+            elif node.status == NodeStatus.FAILED:
+                results[node_id] = {
+                    "status": "FAILED",
+                    "error": node.last_error,
+                    "attempt": node.attempt,
+                }
+            else:
+                results[node_id] = {"status": node.status.value}
+
+        return results
