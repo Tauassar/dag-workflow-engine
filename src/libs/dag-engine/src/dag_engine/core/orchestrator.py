@@ -47,7 +47,6 @@ class EventDrivenDagOrchestrator:
         self.result_store = result_store
         self.result_ttl = result_ttl_seconds
 
-        self._lock = asyncio.Lock()
         self._result_task: asyncio.Task | None = None
 
         # template resolver uses an async result provider
@@ -128,10 +127,9 @@ class EventDrivenDagOrchestrator:
         Seeds all root nodes (no dependencies) by publishing TaskMessage.
         Starts background result-processing loop.
         """
-        async with self._lock:
-            for _, node in self.dag.nodes.items():
-                if not node.depends_on and node.status == NodeStatus.PENDING:
-                    await self._publish_task(node)
+        for _, node in self.dag.nodes.items():
+            if not node.depends_on and node.status == NodeStatus.PENDING:
+                await self._publish_task(node)
 
         # Start asynchronous loop for results
         return self.dag.workflow_id
