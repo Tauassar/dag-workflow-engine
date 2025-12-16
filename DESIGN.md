@@ -110,7 +110,7 @@ Using dedicated dispatch:{workflow_id}:{node_id}:{attempt} and exec:{workflow_id
 |                        | dispatch              | receive                   |
 |                        v                       v                           |
 |                 +-----+-----------+-------------------+                    |
-|                 |            DagOrchestrator          |                    |
+|                 |            EventDrivenDagOrchestrator          |                    |
 |                 |  DAG Execution, Scheduling, Retry   |                    |
 |                 +-----+-------------------------+-----+                    |
 |                        |                         ^                         |

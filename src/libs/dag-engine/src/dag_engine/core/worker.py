@@ -8,7 +8,7 @@ from dag_engine.store.results import ResultStore
 from dag_engine.transport import TaskMessage
 
 from dag_engine.event_sourcing import EventBus, WorkflowEvent, WorkflowEventType, EventHandler
-from .registry import BaseRegistry
+from dag_engine.utils.registry import BaseRegistry
 
 
 Handler = t.Callable[[TaskMessage], t.Awaitable[t.Any]]
@@ -17,19 +17,20 @@ Handler = t.Callable[[TaskMessage], t.Awaitable[t.Any]]
 class WorkerEventHandler(EventHandler):
     def __init__(self, worker: "WorkflowWorker"):
         self.worker = worker
+        self.sem = asyncio.Semaphore(worker.concurrency)
 
     async def handle(self, event: WorkflowEvent) -> None:
-        await self.worker.handle_task(
-            TaskMessage(
-                workflow_name=event.workflow_name,
-                workflow_id=event.workflow_id,
-                node_id=event.node_id,
-                node_type=event.node_type,
-                attempt=event.attempt,
-                config=event.payload,
-                timestamp=event.timestamp,
+        async with self.sem:
+            await self.worker.handle_task(
+                TaskMessage(
+                    workflow_id=event.workflow_id,
+                    node_id=event.node_id,
+                    node_type=event.node_type,
+                    attempt=event.attempt,
+                    config=event.payload,
+                    timestamp=event.timestamp,
+                )
             )
-        )
 
 
 class HandlerRegistry(BaseRegistry[Handler]):
@@ -61,16 +62,18 @@ class WorkflowWorker:
         result_store: ResultStore | None = None,
         worker_id: str = "worker",
         result_ttl_seconds: int | None = None,
+        concurrency: int = 1,
     ):
         self.event_bus = event_bus
-        eh = WorkerEventHandler(self)
-        event_bus.subscribe(WorkflowEventType.NODE_STARTED, eh)
         self.handlers = handler_registry
+        self.concurrency = concurrency
         self.result_store = result_store
         self.idempotency_store = idempotency_store
         self.worker_id = worker_id
         self._stop = False
         self.result_ttl = result_ttl_seconds
+        eh = WorkerEventHandler(self)
+        event_bus.subscribe(WorkflowEventType.NODE_STARTED, eh)
 
     async def _emit_event(self, event: WorkflowEvent) -> None:
         await self.event_bus.publish(event)
@@ -115,11 +118,9 @@ class WorkflowWorker:
                 )
                 pointer = {"result_key": self.result_store.get_key(task.workflow_id, task.node_id)}
 
-            # Publish success (payload is either pointer or actual result)
             await self._emit_event(
                 WorkflowEvent(
                     workflow_id=task.workflow_id,
-                    workflow_name=task.workflow_name,
                     node_id=task.node_id,
                     event_type=WorkflowEventType.NODE_COMPLETED,
                     attempt=task.attempt,
@@ -143,7 +144,6 @@ class WorkflowWorker:
         await self._emit_event(
             WorkflowEvent(
                 workflow_id=task.workflow_id,
-                workflow_name=task.workflow_name,
                 node_id=task.node_id,
                 event_type=WorkflowEventType.NODE_FAILED,
                 attempt=task.attempt,

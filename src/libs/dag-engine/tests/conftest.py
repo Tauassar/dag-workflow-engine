@@ -1,7 +1,10 @@
 import pytest
+import logging
 from fakeredis.aioredis import FakeRedis
 
-from dag_engine.transport import RedisTransport, InMemoryTransport
+from dag_engine.event_sourcing import EventBus, InMemoryEventStore
+from dag_engine.store.atomic_counter import InMemCounterStore
+from dag_engine.transport import InMemoryConsumer, InMemoryPublisher
 
 
 class FakeResultStore:
@@ -53,6 +56,17 @@ class FakeExecutionStore:
         return self.results.get(workflow_id)
 
 
+@pytest.fixture(scope="session", autouse=True)
+async def session_setup() -> None:
+    """Session setup fixture."""
+    LOG_FORMAT = "%(asctime)s [%(levelname)s] " "%(filename)s:%(lineno)d (%(funcName)s) — %(message)s"
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format=LOG_FORMAT,
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
 @pytest.fixture
 async def redis():
     client = FakeRedis()
@@ -61,23 +75,28 @@ async def redis():
 
 
 @pytest.fixture
-async def rtransport(redis):
-    tr = RedisTransport(
-        redis=redis,
-        tasks_stream="tasks",
-        results_stream="results",
-        task_group="task_group",
-        result_group="result_group",
-        consumer_name="consumer",
-        block_ms=50,   # small block for fast tests
-    )
-    await tr.init()
-    return tr
+async def event_store():
+    return InMemoryEventStore()
 
 
 @pytest.fixture
-async def in_mem_transport(redis):
-    return InMemoryTransport()
+async def publisher():
+    return InMemoryPublisher("test")
+
+
+@pytest.fixture
+async def consumer():
+    return InMemoryConsumer("test")
+
+
+@pytest.fixture
+async def counter():
+    return InMemCounterStore()
+
+
+@pytest.fixture
+async def event_bus(publisher, event_store):
+    return EventBus(publisher=publisher, event_store=event_store)
 
 
 @pytest.fixture

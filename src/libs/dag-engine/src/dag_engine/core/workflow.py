@@ -27,7 +27,6 @@ class WorkflowDAG:
     ) -> None:
         self.event_bus = event_bus
 
-        self.workflow_name = definition.name
         self.workflow_id = workflow_id
         self._nodes = {}
 
@@ -133,7 +132,6 @@ class WorkflowDAG:
                     await self._emit_event(
                         WorkflowEvent(
                             workflow_id=self.workflow_id,
-                            workflow_name=self.workflow_name,
                             node_id=child.id,
                             event_type=WorkflowEventType.NODE_BLOCKED,
                             attempt=child.attempt,

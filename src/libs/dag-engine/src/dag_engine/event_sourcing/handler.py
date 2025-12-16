@@ -1,7 +1,7 @@
 import abc
 
 from .schemas import WorkflowEvent
-from dag_engine.core.registry import BaseRegistry
+from dag_engine.utils.registry import BaseRegistry
 
 
 class EventHandler(abc.ABC):

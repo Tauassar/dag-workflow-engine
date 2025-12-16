@@ -9,7 +9,7 @@ from .protocols import WorkflowExecutionStore
 class RedisExecutionStore(WorkflowExecutionStore):
     """
     Persists final workflow execution metadata + results snapshot.
-    Does NOT store in-progress state (that lives in DagOrchestrator).
+    Does NOT store in-progress state (that lives in EventDrivenDagOrchestrator).
     """
 
     def __init__(self, redis: Redis):

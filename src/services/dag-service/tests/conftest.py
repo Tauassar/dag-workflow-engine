@@ -10,7 +10,7 @@ from httpx import AsyncClient, ASGITransport
 
 # Import your pieces (adjust import paths if needed)
 from dag_service.routes.v1 import v1_router, get_container as get_container_dep, get_manager as get_manager_dep
-from dag_engine.core.orchestrator import DagOrchestrator
+from dag_engine.core.orchestrator import EventDrivenDagOrchestrator
 from dag_engine.core.manager import WorkflowManager
 from dag_engine.core import hregistry
 from dag_engine.transport.local import InMemoryTransport
@@ -104,7 +104,7 @@ class TestContainer:
         self.worker = None
 
     async def create_workflow_manager(self) -> WorkflowManager:
-        # DagOrchestrator expects a single transport that supports both task/result streams.
+        # EventDrivenDagOrchestrator expects a single transport that supports both task/result streams.
         # Use a simple proxy transport that publishes tasks to tasks_transport and results to results_transport.
         class ProxyTransport:
             def __init__(self, t_tasks: InMemoryTransport, t_results: InMemoryTransport):
@@ -195,7 +195,7 @@ class TestContainer:
         await self.create_workflow_manager()
         await self.create_workflow_worker()
 
-        # Patch DagOrchestrator._result_loop to work with our InMemoryTransport
+        # Patch EventDrivenDagOrchestrator._result_loop to work with our InMemoryTransport
         async def _result_loop(self):
             # subscribe_results for proxy transport does not accept wf_id
             async for result in t.cast(t.AsyncIterator[ResultMessage], self.transport.subscribe_results()):
@@ -203,7 +203,7 @@ class TestContainer:
                     break
                 await self._handle_result(result)
 
-        DagOrchestrator._result_loop = _result_loop
+        EventDrivenDagOrchestrator._result_loop = _result_loop
 
         # leave manager un-started; tests will call manager.start_workflow via API
         return self

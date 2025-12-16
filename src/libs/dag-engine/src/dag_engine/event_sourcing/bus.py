@@ -4,10 +4,11 @@ import logging
 
 from collections import defaultdict
 
+from dag_engine.transport import Publisher
+
 from .constants import WorkflowEventType
 from .schemas import WorkflowEvent
 from .handler import EventHandler
-from dag_engine.transport.consumer import RedisPublisher
 from .store import EventStore
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ class AbstractEventBus(abc.ABC):
 
 
 class EventBus(AbstractEventBus):
-    def __init__(self, publisher: RedisPublisher, event_store: EventStore | None = None) -> None:
+    def __init__(self, publisher: Publisher, event_store: EventStore | None = None) -> None:
         self._handlers: dict[WorkflowEventType, list[EventHandler]] = defaultdict(list)
         self.publisher = publisher
         self.event_store = event_store

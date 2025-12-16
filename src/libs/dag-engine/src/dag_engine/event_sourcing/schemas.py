@@ -7,7 +7,6 @@ from .constants import WorkflowEventType
 
 
 class WorkflowEvent(pd.BaseModel):
-    workflow_name: str
     workflow_id: str
     node_id: str
     node_type: str | None = None

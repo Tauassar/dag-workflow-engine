@@ -9,16 +9,16 @@ import uuid
 from dag_engine.core import WorkflowWorker, WorkflowManager, WorkflowDefinition
 from dag_engine.core import hregistry
 from dag_engine.core.timeout_monitor import GlobalTimeoutMonitor
-from dag_engine.event_sourcing import WorkflowEvent
+from dag_engine.event_sourcing import WorkflowEvent, RedisEventStore
 from dag_engine.event_sourcing.bus import EventBus
-from dag_engine.event_sourcing.store import RedisEventStore
+from dag_engine.store.atomic_counter import RedisDependencyCounterStore
 from dag_engine.store.execution import RedisExecutionStore
 from dag_engine.store.idempotency import RedisIdempotencyStore
 from dag_engine.store.results import RedisResultStore
 from dag_engine.transport import TaskMessage
 from redis.asyncio import Redis
 
-from dag_engine.transport.consumer import RedisConsumer, RedisPublisher
+from dag_engine.transport import RedisConsumer, RedisPublisher
 from .core.workflow import WorkflowDAG
 
 _EVENTS_STREAM = "events"
@@ -58,7 +58,13 @@ class RedisWorkerConsumer:
 
 
 _redis = Redis(host="localhost", port=6379, decode_responses=True)
-_redis_orchestrator_consumer = RedisOrchestratorConsumer(RedisConsumer(_redis, _EVENTS_STREAM), EventBus(RedisPublisher(_redis, _EVENTS_STREAM), RedisEventStore(_redis),))
+_redis_orchestrator_consumer = RedisOrchestratorConsumer(
+    RedisConsumer(_redis, _EVENTS_STREAM),
+    EventBus(
+        RedisPublisher(_redis, _EVENTS_STREAM),
+        RedisEventStore(_redis),
+    ),
+)
 _redis_worker_consumer1 = RedisWorkerConsumer(
     RedisConsumer(
         _redis,
@@ -104,6 +110,7 @@ USER_JSON = """{
         "id": "get_user",
         "handler": "call_external_service",
         "dependencies": ["input"],
+        "timeout_seconds": 1,
         "config": {
           "url": "http://localhost:8911/document/policy/list/{{input.input_payload.user_id}}",
           "user_id": "{{input.input_payload.user_id}}"
@@ -113,6 +120,7 @@ USER_JSON = """{
         "id": "get_posts",
         "handler": "call_external_service",
         "dependencies": ["input"],
+        "timeout_seconds": 1,
         "config": {
           "url": "http://localhost:8911/document/policy/list"
         }
@@ -129,6 +137,7 @@ USER_JSON = """{
       {
         "id": "output",
         "handler": "output",
+        "timeout_seconds": 1,
         "dependencies": [
           "get_user",
           "get_posts",
@@ -165,7 +174,7 @@ async def call_external_service(task: TaskMessage):
 @hregistry.handler("output")
 async def output_handler(task: TaskMessage):
     await asyncio.sleep(0.01)
-    return {"node": task.node_id, "aggregated": True, "note": "aggregation done by DagOrchestrator", "ctx": task}
+    return {"node": task.node_id, "aggregated": True, "note": "aggregation done by EventDrivenDagOrchestrator", "ctx": task}
 
 
 async def main():
@@ -176,6 +185,8 @@ async def main():
         result_store=RedisResultStore(_redis),
         execution_store=RedisExecutionStore(_redis),
         idempotency_store=RedisIdempotencyStore(_redis),
+        event_store=RedisEventStore(_redis),
+        atomic_counter=RedisDependencyCounterStore(_redis),
     )
     monitor = GlobalTimeoutMonitor(
         idempotency_store=idemp_store,

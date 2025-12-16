@@ -10,8 +10,8 @@ from .orchestrator import EventDrivenDagOrchestrator
 from .workflow import WorkflowDAG
 from dag_engine.event_sourcing import WorkflowEvent, EventHandler, WorkflowEventType
 from ..event_sourcing.bus import EventBus
-from dag_engine.transport import ResultMessage, ResultType
-
+from ..event_sourcing.store import EventStore
+from ..store.atomic_counter.protocol import DependencyCounterStore
 
 if t.TYPE_CHECKING:
     from dag_engine.store.execution import WorkflowExecutionStore
@@ -60,7 +60,7 @@ class ManagerEventHandler(EventHandler):
         self.manager = manager
 
     async def handle(self, event: WorkflowEvent) -> None:
-        await self.manager.on_node_complete(event)
+        asyncio.create_task(self.manager.on_node_complete(event))
 
 
 class WorkflowManager:
@@ -83,111 +83,102 @@ class WorkflowManager:
         result_store: ResultStore,
         execution_store: WorkflowExecutionStore,
         idempotency_store: IdempotencyStore,
+        atomic_counter: DependencyCounterStore,
+        event_store: EventStore,
     ):
         self.result_store = result_store
         self.execution_store = execution_store
         self.idempotency_store = idempotency_store
-
-        self.workflows: dict[str, WorkflowInfo] = {}
-        self._lock = asyncio.Lock()
+        self.atomic_counter = atomic_counter
 
         eh = ManagerEventHandler(self)
         event_bus.subscribe(WorkflowEventType.NODE_COMPLETED, eh)
         event_bus.subscribe(WorkflowEventType.NODE_FAILED, eh)
         event_bus.subscribe(WorkflowEventType.NODE_TIMEOUT, eh)
         self.event_bus = event_bus
+        self.event_store = event_store
+
+    async def _get_orchestrator(self, workflow_id: str) -> EventDrivenDagOrchestrator:
+        events = await self.event_store.list_events(workflow_id)
+        definition = (await self.execution_store.load_metadata(workflow_id))["definition"]
+        dag = WorkflowDAG.from_dict(definition, workflow_id=workflow_id, event_bus=self.event_bus)
+
+        orchestrator = EventDrivenDagOrchestrator(
+            dag=dag,
+            result_store=self.result_store,
+            idempotency_store=self.idempotency_store,
+            event_bus=self.event_bus,
+            atomic_counter=self.atomic_counter
+        )
+        for _event in events:
+            await orchestrator.apply_event(_event)
+
+        return orchestrator
 
     async def _on_workflow_complete(self, workflow_id: str):
         """
-        Called by DagOrchestrator when DAG reaches terminal state.
+        Called by EventDrivenDagOrchestrator when DAG reaches terminal state.
         """
-        async with self._lock:
-            info = self.workflows.get(workflow_id)
-            if not info:
-                return
+        orchestrator = await self._get_orchestrator(workflow_id)
 
-            summary = info.service.collect_results()
+        summary = orchestrator.collect_results()
+        info = WorkflowInfo(
+            workflow_id=workflow_id,
+            dag=orchestrator.dag,
+            service=orchestrator,
+        )
 
-            if any(v["status"] == WorkflowStatus.FAILED for v in summary.values()):
-                info.status = WorkflowStatus.FAILED
-            else:
-                info.status = WorkflowStatus.COMPLETED
+        if any(v["status"] == WorkflowStatus.FAILED for v in summary.values()):
+            info.status = WorkflowStatus.FAILED
+        else:
+            info.status = WorkflowStatus.COMPLETED
 
-            info.completed_at = time.time()
+        info.completed_at = time.time()
 
-            await self.execution_store.save_metadata(
-                workflow_id,
-                {
-                    "workflow_id": workflow_id,
-                    "status": info.status,
-                    "created_at": info.created_at,
-                    "completed_at": info.completed_at,
-                    "error": info.error,
-                },
-            )
-            await self.execution_store.save_results(workflow_id, summary)
-            self.workflows.pop(workflow_id, None)
+        meta = await self.execution_store.load_metadata(workflow_id)
+        await self.execution_store.save_metadata(
+            workflow_id,
+            {
+                "workflow_id": meta["workflow_id"],
+                "status": info.status,
+                "created_at": meta["created_at"],
+                "completed_at": info.completed_at,
+                "error": info.error,
+                "definition": meta["definition"],
+            },
+        )
+        await self.execution_store.save_results(workflow_id, summary)
 
     async def on_node_complete(self, event: WorkflowEvent) -> None:
-        orchestrator = self._registry.get(event.workflow_id)
-        if orchestrator:
-            if event.event_type == WorkflowEventType.NODE_COMPLETED:
-                msg = ResultMessage(
-                    workflow_name=event.workflow_name,
-                    workflow_id=event.workflow_id,
-                    node_id=event.node_id,
-                    attempt=event.attempt,
-                    type=ResultType.COMPLETED,
-                    payload=event.payload,
-                    error=None,
-                    timestamp=event.timestamp,
-                )
-            else:
-                msg = ResultMessage(
-                    workflow_name=event.workflow_name,
-                    workflow_id=event.workflow_id,
-                    node_id=event.node_id,
-                    attempt=event.attempt,
-                    type=ResultType.FAILED,
-                    payload=event.payload,
-                    error=event.error,
-                    timestamp=event.timestamp,
-                )
+        orchestrator = await self._get_orchestrator(event.workflow_id)
+        logger.info(f"Node {event.node_id} completed event received: %s", event)
+        await orchestrator.handle_event(event)
 
-            logger.info(f"Node {event.node_id} completed event received: %s", event)
-            await orchestrator.handle_result(msg)
-
-            if orchestrator.is_finished():
-                await self._on_workflow_complete(event.workflow_id)
-                logger.info(f"Workflow {event.workflow_id} completed")
-                await orchestrator.stop()
-            else:
-                logger.info(f"Workflow {event.workflow_id} execution continue")
+        if orchestrator.is_finished():
+            await self._on_workflow_complete(event.workflow_id)
+            logger.info(f"Workflow {event.workflow_id} completed")
+            await orchestrator.stop()
+        else:
+            logger.info(f"Workflow {event.workflow_id} execution continue")
 
     async def start_workflow(self, workflow_id: str, definition: WorkflowDefinition) -> WorkflowInfo:
         """
         Starts a new workflow execution and registers it.
         """
-        async with self._lock:
-            if workflow_id in self.workflows:
-                raise ValueError(f"Workflow {workflow_id} already exists")
+        dag = WorkflowDAG.from_definition(definition, workflow_id=workflow_id, event_bus=self.event_bus)
+        service = EventDrivenDagOrchestrator(
+            dag=dag,
+            result_store=self.result_store,
+            idempotency_store=self.idempotency_store,
+            event_bus=self.event_bus,
+            atomic_counter=self.atomic_counter
+        )
 
-            dag = WorkflowDAG.from_definition(definition, workflow_id=workflow_id, event_bus=self.event_bus)
-
-            service = EventDrivenDagOrchestrator(
-                dag=dag,
-                result_store=self.result_store,
-                idempotency_store=self.idempotency_store,
-                event_bus=self.event_bus,
-            )
-
-            info = WorkflowInfo(
-                workflow_id=workflow_id,
-                dag=dag,
-                service=service,
-            )
-
-            self.workflows[workflow_id] = info
+        info = WorkflowInfo(
+            workflow_id=workflow_id,
+            dag=dag,
+            service=service,
+        )
 
         await self.execution_store.save_metadata(
             workflow_id,
@@ -197,6 +188,7 @@ class WorkflowManager:
                 "created_at": info.created_at,
                 "completed_at": info.completed_at,
                 "error": info.error,
+                "definition": definition.model_dump(mode="json", by_alias=True),
             },
         )
 
@@ -224,17 +216,7 @@ class WorkflowManager:
         """
         Returns current known status of workflow.
         """
-        info = self.workflows.get(workflow_id)
-        if not info:
-            # Workflow completed earlier or this is another node
-            return await self._load_persisted_status(workflow_id)
-
-        return {
-            "workflow_id": workflow_id,
-            "state": info.status,
-            "created_at": info.created_at,
-            "completed_at": info.completed_at,
-        }
+        return await self._load_persisted_status(workflow_id)
 
     async def get_results(self, workflow_id: str) -> dict[str, t.Any]:
         info = await self._load_persisted_status(workflow_id)

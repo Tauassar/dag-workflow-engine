@@ -4,7 +4,7 @@ import typing as t
 class WorkflowExecutionStore:
     """
     Persists final workflow execution metadata + results snapshot.
-    Does NOT store in-progress state (that lives in DagOrchestrator).
+    Does NOT store in-progress state (that lives in EventDrivenDagOrchestrator).
     """
 
     async def save_metadata(self, workflow_id: str, data: dict[str, t.Any]) -> None: ...

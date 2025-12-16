@@ -5,6 +5,12 @@ from .bus import (
     AbstractEventBus,
     EventBus,
 )
+from .store import (
+    EventStore,
+    RedisEventStore,
+    InMemoryEventStore,
+)
+
 
 __all__ = (
     "WorkflowEventType",
@@ -12,4 +18,7 @@ __all__ = (
     "EventHandler",
     "AbstractEventBus",
     "EventBus",
+    "EventStore",
+    "RedisEventStore",
+    "InMemoryEventStore",
 )

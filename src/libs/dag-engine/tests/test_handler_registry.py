@@ -27,7 +27,6 @@ async def test_handler_executes_successfully():
     handler = registry.handlers["task"]
     result = await handler(TaskMessage(
         workflow_id="wf",
-        workflow_name="nm",
         node_id="nodeX",
         node_type="task",
         attempt=1,
