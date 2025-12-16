@@ -10,7 +10,7 @@ from dag_engine.store.atomic_counter import RedisDependencyCounterStore
 from dag_engine.store.execution import RedisExecutionStore
 from dag_engine.store.idempotency import RedisIdempotencyStore
 from dag_engine.store.results import RedisResultStore
-from dag_engine.transport import RedisConsumer, RedisPublisher
+from dag_engine.transport import RedisConsumer, RedisPublisher, Consumer
 from redis.asyncio import Redis
 
 from .config import Settings
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class EventsRedisConsumer:
-    def __init__(self, redis_consumer: RedisConsumer, event_bus: EventBus):
+    def __init__(self, redis_consumer: Consumer, event_bus: EventBus):
         self.event_bus = event_bus
         self.consumer = redis_consumer
 
