@@ -4,7 +4,7 @@ import typing as t
 
 from redis.asyncio import Redis
 
-from .protocols import Publisher, Consumer
+from .protocols import Consumer, Publisher
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ class RedisConsumer(Consumer):
                 return v
         return None
 
-    async def subscribe(self) -> t.AsyncIterator[dict]:
+    async def subscribe(self) -> t.AsyncIterator[dict]:  # type: ignore[override]
         """
         Each caller may create/read from a per-workflow consumer group.
         """

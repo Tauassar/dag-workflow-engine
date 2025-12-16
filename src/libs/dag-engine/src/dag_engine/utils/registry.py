@@ -1,8 +1,7 @@
 import asyncio
 from typing import TypeVar
 
-
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class BaseRegistry[T]:
@@ -16,7 +15,7 @@ class BaseRegistry[T]:
     def _register_handler(self, node_type: str, handler: T) -> None:
         if not asyncio.iscoroutinefunction(handler):
             raise ValueError("handler must be async")
-        self._handlers_by_type[node_type] = handler
+        self._handlers_by_type[node_type] = handler  # type: ignore[assignment]
 
     def handler(self, node_type: str):
         def decorator(func: T):

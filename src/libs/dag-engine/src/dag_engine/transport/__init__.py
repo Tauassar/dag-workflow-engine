@@ -1,11 +1,11 @@
-from .local import InMemoryPublisher, InMemoryConsumer
+from .local import InMemoryConsumer, InMemoryPublisher
 from .messages import (
     ResultMessage,
     ResultType,
     TaskMessage,
 )
-from .protocols import Publisher, Consumer
-from .redis import RedisPublisher, RedisConsumer
+from .protocols import Consumer, Publisher
+from .redis import RedisConsumer, RedisPublisher
 
 __all__ = (
     "Publisher",

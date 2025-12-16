@@ -9,7 +9,7 @@ from .schemas import (
     RetryPolicy,
     WorkflowDefinition,
 )
-from .worker import WorkflowWorker, HandlerRegistry, hregistry
+from .worker import HandlerRegistry, WorkflowWorker, hregistry
 from .workflow import WorkflowDAG
 
 __all__ = (

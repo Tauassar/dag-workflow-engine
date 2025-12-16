@@ -1,14 +1,13 @@
 import abc
 import asyncio
 import logging
-
 from collections import defaultdict
 
 from dag_engine.transport import Publisher
 
 from .constants import WorkflowEventType
-from .schemas import WorkflowEvent
 from .handler import EventHandler
+from .schemas import WorkflowEvent
 from .store import EventStore
 
 logger = logging.getLogger(__name__)
@@ -18,14 +17,12 @@ class AbstractEventBus(abc.ABC):
     @abc.abstractmethod
     def subscribe(
         self,
-        event_type: type[WorkflowEventType],
+        event_type: WorkflowEventType,
         handler: EventHandler,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abc.abstractmethod
-    async def publish(self, event: WorkflowEvent) -> None:
-        ...
+    async def publish(self, event: WorkflowEvent) -> None: ...
 
 
 class EventBus(AbstractEventBus):
@@ -52,10 +49,7 @@ class EventBus(AbstractEventBus):
         if not handlers:
             return
 
-        tasks = [
-            asyncio.create_task(self._safe_handle(handler, event))
-            for handler in handlers
-        ]
+        tasks = [asyncio.create_task(self._safe_handle(handler, event)) for handler in handlers]
 
         # fire-and-forget but still awaited for lifecycle control
         await asyncio.gather(*tasks)
@@ -69,6 +63,6 @@ class EventBus(AbstractEventBus):
             await handler.handle(event)
         except Exception as exc:
             logger.warning(
-                f"[EventBus] handler={handler.__class__.__name__} "
-                f"event={type(event).__name__} error={exc}", exc_info=True
+                f"[EventBus] handler={handler.__class__.__name__} " f"event={type(event).__name__} error={exc}",
+                exc_info=True,
             )

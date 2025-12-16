@@ -1,11 +1,11 @@
-import asyncio
+import itertools
 import json
 import logging
 import typing as t
-import itertools
 from collections import defaultdict
 from dataclasses import dataclass
-from .protocols import Publisher, Consumer
+
+from .protocols import Consumer, Publisher
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +26,12 @@ class _InMemoryStream:
     """
     Single stream with Redis-Streams-like consumer groups.
     """
+
     def __init__(self):
         self._messages: list[_Message] = []
         self._id_seq = itertools.count(1)
 
         self._group_offsets: dict[str, int] = defaultdict(int)
-
 
     async def publish(self, payload: dict) -> None:
         msg = _Message(
@@ -50,6 +50,7 @@ class _InMemoryStream:
             msg = self._messages[offset]
             self._group_offsets[group] += 1
             return msg
+        return None
 
     async def ack_and_delete(self, msg_id: MessageId) -> None:
         self._messages = [m for m in self._messages if m.id != msg_id]
@@ -70,6 +71,7 @@ class InMemoryPublisher(Publisher):
     """
     In-memory analog of RedisPublisher.
     """
+
     def __init__(self, stream: str):
         self._stream = stream
         self._backend = _get_stream(stream)
@@ -83,6 +85,7 @@ class InMemoryConsumer(Consumer):
     """
     In-memory analog of RedisConsumer.
     """
+
     def __init__(
         self,
         stream: str,
@@ -94,7 +97,7 @@ class InMemoryConsumer(Consumer):
         self.consumer_name = consumer_name
         self._backend = _get_stream(stream)
 
-    async def subscribe(self) -> t.AsyncIterator[dict]:
+    async def subscribe(self) -> t.AsyncIterator[dict]:  # type: ignore[override]
         while True:
             msg = await self._backend.read(
                 group=self._group,
@@ -105,7 +108,7 @@ class InMemoryConsumer(Consumer):
 
             try:
                 raw = msg.payload.get("json")
-                yield raw
+                yield raw  # type: ignore[misc]
             except Exception as e:
                 logger.warning("decode failure: %s", e)
             finally:
@@ -130,4 +133,4 @@ class InMemoryConsumer(Consumer):
                 group=self._group,
             )
 
-        return messages
+        return messages  # type: ignore[return-value]

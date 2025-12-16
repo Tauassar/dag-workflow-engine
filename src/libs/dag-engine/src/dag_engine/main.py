@@ -6,19 +6,17 @@ import logging
 import time
 import uuid
 
-from dag_engine.core import WorkflowWorker, WorkflowManager, WorkflowDefinition
-from dag_engine.core import hregistry
+from dag_engine.core import WorkflowDefinition, WorkflowManager, WorkflowWorker, hregistry
 from dag_engine.core.timeout_monitor import GlobalTimeoutMonitor
-from dag_engine.event_sourcing import WorkflowEvent, RedisEventStore
+from dag_engine.event_sourcing import RedisEventStore, WorkflowEvent
 from dag_engine.event_sourcing.bus import EventBus
 from dag_engine.store.atomic_counter import RedisDependencyCounterStore
 from dag_engine.store.execution import RedisExecutionStore
 from dag_engine.store.idempotency import RedisIdempotencyStore
 from dag_engine.store.results import RedisResultStore
-from dag_engine.transport import TaskMessage
+from dag_engine.transport import RedisConsumer, RedisPublisher, TaskMessage
 from redis.asyncio import Redis
 
-from dag_engine.transport import RedisConsumer, RedisPublisher
 from .core.workflow import WorkflowDAG
 
 _EVENTS_STREAM = "events"
@@ -78,7 +76,7 @@ _redis_worker_consumer1 = RedisWorkerConsumer(
             _EVENTS_STREAM,
         ),
         RedisEventStore(_redis),
-    )
+    ),
 )
 _redis_worker_consumer2 = RedisWorkerConsumer(
     RedisConsumer(
@@ -93,7 +91,7 @@ _redis_worker_consumer2 = RedisWorkerConsumer(
             _EVENTS_STREAM,
         ),
         RedisEventStore(_redis),
-    )
+    ),
 )
 
 USER_JSON = """{
@@ -174,7 +172,12 @@ async def call_external_service(task: TaskMessage):
 @hregistry.handler("output")
 async def output_handler(task: TaskMessage):
     await asyncio.sleep(0.01)
-    return {"node": task.node_id, "aggregated": True, "note": "aggregation done by EventDrivenDagOrchestrator", "ctx": task}
+    return {
+        "node": task.node_id,
+        "aggregated": True,
+        "note": "aggregation done by EventDrivenDagOrchestrator",
+        "ctx": task,
+    }
 
 
 async def main():
@@ -195,13 +198,15 @@ async def main():
 
     async def runner():
         await asyncio.sleep(1)
-        await manager.start_workflow(str(uuid.uuid4()), WorkflowDefinition.model_validate(json.loads(USER_JSON), by_alias=True))
+        await manager.start_workflow(
+            str(uuid.uuid4()), WorkflowDefinition.model_validate(json.loads(USER_JSON), by_alias=True)
+        )
 
     # start external workers (they read tasks via transport)
-    worker1 = WorkflowWorker(
+    WorkflowWorker(
         _redis_worker_consumer1.event_bus, hregistry.handlers, idemp_store, result_store=result_store, worker_id="w1"
     )
-    worker2 = WorkflowWorker(
+    WorkflowWorker(
         _redis_worker_consumer2.event_bus, hregistry.handlers, idemp_store, result_store=result_store, worker_id="w2"
     )
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Dict
 
 from .protocol import DependencyCounterStore
 
@@ -20,8 +19,8 @@ class InMemCounterStore(DependencyCounterStore):
 
     def __init__(self, prefix: str = "depcount"):
         self.prefix = prefix
-        self._values: Dict[str, int] = {}
-        self._expires_at: Dict[str, float] = {}
+        self._values: dict[str, int] = {}
+        self._expires_at: dict[str, float] = {}
         self._lock = asyncio.Lock()
 
     # -----------------------------------------------------

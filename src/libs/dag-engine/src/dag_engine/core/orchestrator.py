@@ -5,6 +5,7 @@ import typing as t
 
 from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType
 from dag_engine.event_sourcing.bus import EventBus
+from dag_engine.store.atomic_counter.protocol import DependencyCounterStore
 from dag_engine.store.idempotency import IdempotencyStore
 from dag_engine.store.results import ResultStore
 
@@ -13,7 +14,6 @@ from .entities import DagNode
 from .exceptions import MissingDependencyError, TemplateResolutionError
 from .templates import TemplateResolver
 from .workflow import WorkflowDAG
-from dag_engine.store.atomic_counter.protocol import DependencyCounterStore
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,9 @@ class EventDrivenDagOrchestrator:
             await self.stop()
             raise
 
-        await self.atomic_counter.init_counter(node_id=node.id, workflow_id=self.dag.workflow_id, initial=len(node.depends_on))
+        await self.atomic_counter.init_counter(
+            node_id=node.id, workflow_id=self.dag.workflow_id, initial=len(node.depends_on)
+        )
         await self._emit_event(
             WorkflowEvent(
                 event_type=WorkflowEventType.NODE_STARTED,
@@ -143,24 +145,25 @@ class EventDrivenDagOrchestrator:
             return
 
         node = self.dag.nodes.get(event.node_id)
-        logger.debug(f"Node found {node}")
+        if not node:
+            logger.debug(f"Node not found {node}")
+            return
 
-        if event.attempt != node.attempt:
+        logger.debug(f"Node found {node}")
+        if event.attempt and event.attempt != node.attempt:
             # ignore stale/late result
             logger.debug(f"Node {event.node_id}, received stale result {event.payload}")
             return
 
-        logger.debug(f"Received result for node {event.node_id}:{event.workflow_id}, attempt {event.attempt}, node attempt {node.attempt}")
+        logger.debug(
+            f"Received result for node {event.node_id}:{event.workflow_id}, attempt {event.attempt}, node attempt {node.attempt}"
+        )
 
         if event.event_type == WorkflowEventType.NODE_COMPLETED:
-            logger.info(
-                f"Node {event.node_id}:{event.workflow_id} completed successfully"
-            )
+            logger.info(f"Node {event.node_id}:{event.workflow_id} completed successfully")
             await self._handle_success(event=event)
         else:
-            logger.info(
-                f"Node {event.node_id}:{event.workflow_id} failed"
-            )
+            logger.info(f"Node {event.node_id}:{event.workflow_id} failed")
             await self._handle_failure(event=event)
 
     async def apply_event(self, event: WorkflowEvent) -> None:
@@ -233,9 +236,13 @@ class EventDrivenDagOrchestrator:
             remaining = await self.atomic_counter.decrement(node_id=dep_id, workflow_id=self.dag.workflow_id)
 
             if remaining > 0:
-                logger.debug(f"Node {dep.id} is not started since {remaining} dependents did not complete {dep.depends_on} {[self.dag.nodes[d].status for d in dep.depends_on]}")
+                logger.debug(
+                    f"Node {dep.id} is not started since {remaining} dependents did not complete {dep.depends_on} {[self.dag.nodes[d].status for d in dep.depends_on]}"
+                )
             else:
-                logger.debug(f"Node {dep.id} is started since all of dependents {dep.depends_on} {[self.dag.nodes[d].status for d in dep.depends_on]} completed successfully")
+                logger.debug(
+                    f"Node {dep.id} is started since all of dependents {dep.depends_on} {[self.dag.nodes[d].status for d in dep.depends_on]} completed successfully"
+                )
                 await self._publish_task(dep)
 
     async def _handle_failure(self, event: WorkflowEvent) -> None:

@@ -4,7 +4,7 @@ import math
 import time
 from abc import ABC
 
-from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType, EventBus, EventHandler
+from dag_engine.event_sourcing import EventBus, EventHandler, WorkflowEvent, WorkflowEventType
 from dag_engine.store.idempotency import IdempotencyStore
 
 logger = logging.getLogger(__name__)
@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 class MonitorBaseHandler(EventHandler, ABC):
     _monitor: "GlobalTimeoutMonitor"
+
     def __init__(self, monitor: "GlobalTimeoutMonitor"):
         self._monitor = monitor
 
@@ -129,6 +130,6 @@ class GlobalTimeoutMonitor:
                     event_type=WorkflowEventType.NODE_TIMEOUT,
                     attempt=node.attempt,
                     error="TIMEOUT",
-                    expire_at=now + ttl
+                    expire_at=now + ttl,
                 )
             )

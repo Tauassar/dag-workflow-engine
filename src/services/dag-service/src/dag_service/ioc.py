@@ -1,16 +1,15 @@
 import logging
 import uuid
 
-from dag_engine.core import WorkflowWorker
-from dag_engine.core import hregistry
+from dag_engine.core import WorkflowWorker, hregistry
 from dag_engine.core.manager import WorkflowManager
 from dag_engine.core.timeout_monitor import GlobalTimeoutMonitor
-from dag_engine.event_sourcing import RedisEventStore, WorkflowEvent, EventBus
+from dag_engine.event_sourcing import EventBus, RedisEventStore, WorkflowEvent
 from dag_engine.store.atomic_counter import RedisDependencyCounterStore
 from dag_engine.store.execution import RedisExecutionStore
 from dag_engine.store.idempotency import RedisIdempotencyStore
 from dag_engine.store.results import RedisResultStore
-from dag_engine.transport import RedisConsumer, RedisPublisher, Consumer
+from dag_engine.transport import Consumer, RedisConsumer, RedisPublisher
 from redis.asyncio import Redis
 
 from .config import Settings
@@ -62,7 +61,6 @@ class AppContainer:
         # transport
         self.atomic_counter = RedisDependencyCounterStore(self.redis)
         self.publisher = RedisPublisher(self.redis, self._EVENTS_STREAM)
-        self.consumer = RedisConsumer(self.redis, self._EVENTS_STREAM)
         self.event_bus = EventBus(
             self.publisher,
             self.event_store,

@@ -8,8 +8,7 @@ class Publisher(t.Protocol):
     publisher.
     """
 
-    async def publish(self, result: str) -> None:
-        ...
+    async def publish(self, result: str) -> None: ...
 
 
 class Consumer(t.Protocol):

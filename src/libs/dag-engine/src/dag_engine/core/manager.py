@@ -5,15 +5,17 @@ import logging
 import time
 import typing as t
 
+from dag_engine.event_sourcing import EventHandler, WorkflowEvent, WorkflowEventType
+
 from .constants import WorkflowStatus
+from .exceptions import DefinitionNotFoundError
 from .orchestrator import EventDrivenDagOrchestrator
 from .workflow import WorkflowDAG
-from dag_engine.event_sourcing import WorkflowEvent, EventHandler, WorkflowEventType
-from ..event_sourcing.bus import EventBus
-from ..event_sourcing.store import EventStore
-from ..store.atomic_counter.protocol import DependencyCounterStore
 
 if t.TYPE_CHECKING:
+    from dag_engine.event_sourcing.bus import EventBus
+    from dag_engine.event_sourcing.store import EventStore
+    from dag_engine.store.atomic_counter.protocol import DependencyCounterStore
     from dag_engine.store.execution import WorkflowExecutionStore
     from dag_engine.store.idempotency import IdempotencyStore
     from dag_engine.store.results import ResultStore
@@ -22,13 +24,6 @@ if t.TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
-
-
-class EventHandler(EventHandler):
-    _manager: WorkflowManager
-
-    async def handle(self, event: WorkflowEvent) -> None:
-        await self._manager.on_node_complete(event)
 
 
 class WorkflowInfo:
@@ -75,6 +70,7 @@ class WorkflowManager:
     - Track lifecycle events
     - Provide workflow queries
     """
+
     _registry: t.Dict[str, EventDrivenDagOrchestrator] = {}
 
     def __init__(
@@ -100,7 +96,12 @@ class WorkflowManager:
 
     async def _get_orchestrator(self, workflow_id: str) -> EventDrivenDagOrchestrator:
         events = await self.event_store.list_events(workflow_id)
-        definition = (await self.execution_store.load_metadata(workflow_id))["definition"]
+        meta = await self.execution_store.load_metadata(workflow_id)
+
+        if not meta:
+            raise DefinitionNotFoundError("Could not find definition in execution store")
+
+        definition = meta["definition"]
         dag = WorkflowDAG.from_dict(definition, workflow_id=workflow_id, event_bus=self.event_bus)
 
         orchestrator = EventDrivenDagOrchestrator(
@@ -108,7 +109,7 @@ class WorkflowManager:
             result_store=self.result_store,
             idempotency_store=self.idempotency_store,
             event_bus=self.event_bus,
-            atomic_counter=self.atomic_counter
+            atomic_counter=self.atomic_counter,
         )
         for _event in events:
             await orchestrator.apply_event(_event)
@@ -136,6 +137,9 @@ class WorkflowManager:
         info.completed_at = time.time()
 
         meta = await self.execution_store.load_metadata(workflow_id)
+        if not meta:
+            return
+
         await self.execution_store.save_metadata(
             workflow_id,
             {
@@ -171,7 +175,7 @@ class WorkflowManager:
             result_store=self.result_store,
             idempotency_store=self.idempotency_store,
             event_bus=self.event_bus,
-            atomic_counter=self.atomic_counter
+            atomic_counter=self.atomic_counter,
         )
 
         info = WorkflowInfo(

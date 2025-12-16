@@ -5,7 +5,7 @@ import time
 import typing as t
 from collections import deque
 
-from dag_engine.event_sourcing import WorkflowEvent, WorkflowEventType, EventBus
+from dag_engine.event_sourcing import EventBus, WorkflowEvent, WorkflowEventType
 
 from . import NodeStatus
 from .entities import DagNode
@@ -13,7 +13,6 @@ from .exceptions import DagValidationError
 from .schemas import (
     WorkflowDefinition,
 )
-
 
 logger = logging.getLogger(__name__)
 

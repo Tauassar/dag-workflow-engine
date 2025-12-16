@@ -1,7 +1,11 @@
 from __future__ import annotations
-from redis.asyncio import Redis
+
+import typing as t
 
 from .protocol import DependencyCounterStore
+
+if t.TYPE_CHECKING:
+    from redis.asyncio import Redis
 
 
 class RedisDependencyCounterStore(DependencyCounterStore):

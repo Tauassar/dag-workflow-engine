@@ -1,15 +1,12 @@
-import traceback
 import asyncio
+import traceback
 import typing as t
 
+from dag_engine.event_sourcing import EventBus, EventHandler, WorkflowEvent, WorkflowEventType
 from dag_engine.store.idempotency import IdempotencyStore
 from dag_engine.store.results import ResultStore
-
 from dag_engine.transport import TaskMessage
-
-from dag_engine.event_sourcing import EventBus, WorkflowEvent, WorkflowEventType, EventHandler
 from dag_engine.utils.registry import BaseRegistry
-
 
 Handler = t.Callable[[TaskMessage], t.Awaitable[t.Any]]
 

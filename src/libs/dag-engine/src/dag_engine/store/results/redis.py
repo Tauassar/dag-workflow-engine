@@ -8,7 +8,6 @@ from redis.asyncio import Redis
 
 from .protocol import ResultStore
 
-
 logger = logging.getLogger(__name__)
 
 
