@@ -156,7 +156,7 @@ class WorkflowManager:
         logger.info(f"Node {event.node_id} completed event received: %s", event)
         await orchestrator.handle_event(event)
 
-        if orchestrator.is_finished():
+        if await orchestrator.is_finished():
             await self._on_workflow_complete(event.workflow_id)
             logger.info(f"Workflow {event.workflow_id} completed")
             await orchestrator.stop()
