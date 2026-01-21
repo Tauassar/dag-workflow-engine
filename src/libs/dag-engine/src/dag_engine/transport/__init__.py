@@ -1,17 +1,20 @@
-from .local import InMemoryTransport
+from .local import InMemoryConsumer, InMemoryPublisher
 from .messages import (
     ResultMessage,
     ResultType,
     TaskMessage,
 )
-from .protocols import Transport
-from .redis import RedisTransport
+from .protocols import Consumer, Publisher
+from .redis import RedisConsumer, RedisPublisher
 
 __all__ = (
-    "Transport",
+    "Publisher",
+    "Consumer",
     "TaskMessage",
     "ResultType",
     "ResultMessage",
-    "InMemoryTransport",
-    "RedisTransport",
+    "InMemoryPublisher",
+    "InMemoryConsumer",
+    "RedisPublisher",
+    "RedisConsumer",
 )

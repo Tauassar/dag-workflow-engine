@@ -13,7 +13,19 @@ from .server import start
 async def start_worker():
     container = get_container()
     await container.init_worker()
-    await container.worker.run()
+    await asyncio.gather(
+        container.events_consumer.consume(),
+    )
+
+
+async def start_orchestrator():
+    container = get_container()
+    await container.init_orchestrator()
+    await asyncio.gather(
+        start(),
+        container.events_consumer.consume(),
+        container.monitor.start(),
+    )
 
 
 @click.group()
@@ -28,7 +40,7 @@ def run_worker() -> None:
 
 @main.command(name="web")
 def run_web() -> None:
-    asyncio.run(start())
+    asyncio.run(start_orchestrator())
 
 
 if __name__ == "__main__":

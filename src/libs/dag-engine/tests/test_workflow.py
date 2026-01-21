@@ -1,13 +1,13 @@
+import json
+
 import pytest
-import asyncio
-from collections import deque
 from unittest.mock import AsyncMock
 
 from dag_engine.core.workflow import WorkflowDAG
-from dag_engine.core.entities import DagNode, NodeStatus
+from dag_engine.core.entities import NodeStatus
 from dag_engine.core.exceptions import DagValidationError
 from dag_engine.core.schemas import WorkflowDefinition
-from dag_engine.event_sourcing import WorkflowEventType, WorkflowEvent
+from dag_engine.event_sourcing import WorkflowEventType
 
 
 def make_definition(nodes):
@@ -177,14 +177,14 @@ async def test_block_dependents_requires_failed_state():
 
 
 @pytest.mark.asyncio
-async def test_block_dependents_emits_event():
+async def test_block_dependents_emits_event(event_bus, event_store):
     definition = make_definition([
         {"id": "a", "handler": "t", "dependencies": []},
         {"id": "b", "handler": "t", "dependencies": ["a"]},
     ])
 
     mock_event_store = AsyncMock()
-    dag = WorkflowDAG.from_definition(workflow_id="wf", definition=definition, event_store=mock_event_store)
+    dag = WorkflowDAG.from_definition(workflow_id="wf", definition=definition, event_bus=event_bus)
 
     dag.nodes["a"].status = NodeStatus.FAILED
     await dag.block_dependents("a")
@@ -193,9 +193,8 @@ async def test_block_dependents_emits_event():
     assert dag.nodes["b"].status == NodeStatus.FAILED
 
     # event_store.append should have been called once
-    assert mock_event_store.append.await_count == 1
-
-    event_arg = mock_event_store.append.await_args[0][0]
+    assert len(event_store._events["wf"]) == 1
+    event_arg = event_store._events["wf"][0]
     assert event_arg.event_type == WorkflowEventType.NODE_BLOCKED
     assert event_arg.node_id == "b"
     assert event_arg.workflow_id == "wf"

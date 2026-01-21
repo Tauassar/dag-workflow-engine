@@ -1,5 +1,5 @@
 import redis.asyncio as aioredis
-from dag_engine.event_sourcing import WorkflowEvent
+from dag_engine.event_sourcing.schemas import WorkflowEvent
 
 from .protocols import EventStore
 

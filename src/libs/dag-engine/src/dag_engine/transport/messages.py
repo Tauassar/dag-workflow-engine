@@ -6,7 +6,6 @@ import pydantic as pd
 
 
 class TaskMessage(pd.BaseModel):
-    workflow_name: str
     workflow_id: str
     node_id: str
     node_type: str
@@ -21,7 +20,6 @@ class ResultType(enum.StrEnum):
 
 
 class ResultMessage(pd.BaseModel):
-    workflow_name: str
     workflow_id: str
     node_id: str
     attempt: int

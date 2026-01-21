@@ -1,6 +1,10 @@
 class DagEngineException(Exception): ...
 
 
+class DefinitionNotFoundError(DagEngineException):
+    """Occurs when a DAG definition is not found in execution store."""
+
+
 class DagValidationError(DagEngineException):
     """Occurs when a DAG Validation fails or DAG construction fails."""
 

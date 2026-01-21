@@ -1,6 +1,6 @@
 import pytest
 import asyncio
-from dag_engine.core.handlers import HandlerRegistry, hregistry
+from dag_engine.core import HandlerRegistry, hregistry
 from dag_engine.transport import TaskMessage
 
 
@@ -27,7 +27,6 @@ async def test_handler_executes_successfully():
     handler = registry.handlers["task"]
     result = await handler(TaskMessage(
         workflow_id="wf",
-        workflow_name="nm",
         node_id="nodeX",
         node_type="task",
         attempt=1,

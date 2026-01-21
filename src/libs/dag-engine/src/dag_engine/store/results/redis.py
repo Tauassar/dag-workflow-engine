@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from typing import Any
 
@@ -6,6 +7,8 @@ from dag_engine.serializer import JSONResultSerializer
 from redis.asyncio import Redis
 
 from .protocol import ResultStore
+
+logger = logging.getLogger(__name__)
 
 
 class RedisResultStore(ResultStore):
@@ -66,6 +69,8 @@ class RedisResultStore(ResultStore):
             await self.redis.set(key, data, nx=True)
         else:
             await self.redis.set(key, data, ex=int(ttl_seconds), nx=True)
+
+        logger.debug(f"Saved result {payload}")
 
     async def get_result(self, workflow_id: str, node_id: str) -> dict[str, Any] | None:
         key = self.get_key(workflow_id, node_id)

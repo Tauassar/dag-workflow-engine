@@ -35,4 +35,9 @@ async def call_llm_service(task: TaskMessage) -> str:
 @hregistry.handler("output")
 async def output_handler(task: TaskMessage) -> dict[str, t.Any]:
     await asyncio.sleep(0.01)
-    return {"node": task.node_id, "aggregated": True, "note": "aggregation done by DagOrchestrator", "ctx": task}
+    return {
+        "node": task.node_id,
+        "aggregated": True,
+        "note": "aggregation done by EventDrivenDagOrchestrator",
+        "ctx": task,
+    }

@@ -32,5 +32,7 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int | str = 0
 
+    EVENTS_STREAM: str = "events"
+
 
 settings = Settings()
